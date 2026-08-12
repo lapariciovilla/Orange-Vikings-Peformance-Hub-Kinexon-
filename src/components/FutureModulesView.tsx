@@ -1,47 +1,51 @@
 import React, { useState } from 'react';
-import { Player } from '../types';
+import { Player, RPEEntry } from '../types';
 import { DataStore } from '../lib/dataStore';
 import {
   Activity,
-  Heart,
-  Dumbbell,
-  Trophy,
   Plus,
   CheckCircle2,
   Calendar,
+  Edit2,
+  Trash2,
+  Save,
+  X,
+  TrendingUp,
+  BarChart2,
+  Filter,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  LineChart,
+  Line,
+} from 'recharts';
 
 interface FutureModulesViewProps {
   roster: Player[];
 }
 
 export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) => {
-  const [activeTab, setActiveTab] = useState<'rpe' | 'wellness' | 'sc' | 'game'>('rpe');
   const [toast, setToast] = useState<string | null>(null);
+  const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'yesterday' | 'week'>('all');
 
-  // RPE Form
+  // New RPE Form State
   const [rpePlayerId, setRpePlayerId] = useState(roster[0]?.id || '');
   const [rpeScore, setRpeScore] = useState<number>(7);
   const [rpeDate, setRpeDate] = useState('2026-08-11');
   const [rpeNotes, setRpeNotes] = useState('');
 
-  // Wellness Form
-  const [wellPlayerId, setWellPlayerId] = useState(roster[0]?.id || '');
-  const [sleepScore, setSleepScore] = useState(8);
-  const [fatigueScore, setFatigueScore] = useState(6);
-  const [sorenessScore, setSorenessScore] = useState(5);
-  const [stressScore, setStressScore] = useState(4);
-  const [readinessScore, setReadinessScore] = useState(7);
+  // Editing state for RPE logs
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Partial<RPEEntry>>({});
 
-  // S&C Intervention Form
-  const [scPlayerId, setScPlayerId] = useState(roster[0]?.id || '');
-  const [scExercise, setScExercise] = useState('Patellar Tendon Yielding Isometric');
-  const [scType, setScType] = useState('Yielding Isometric');
-  const [scAngle, setScAngle] = useState('60 deg Knee Flexion');
-  const [scDuration, setScDuration] = useState(30);
-  const [scSets, setScSets] = useState(3);
-  const [scTarget, setScTarget] = useState('Patellar Tendon / Extensor Mechanism');
-  const [scReason, setScReason] = useState('Targeted tendon stiffness after high deceleration session');
+  // Refresh trigger state
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -55,46 +59,81 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
       date: rpeDate,
       rpe_score: rpeScore,
       rpe_scale: 'Borg CR10',
-      notes: rpeNotes,
+      notes: rpeNotes || 'Regular training session',
     });
+    setRpeNotes('');
     showToast('RPE score successfully recorded!');
+    setRefreshTrigger((prev) => prev + 1);
   };
 
-  const handleSaveWellness = () => {
-    DataStore.saveWellnessEntry({
-      player_id: wellPlayerId,
-      date: rpeDate,
-      sleep_score: sleepScore,
-      fatigue_score: fatigueScore,
-      soreness_score: sorenessScore,
-      stress_score: stressScore,
-      readiness_score: readinessScore,
+  const handleStartEdit = (entry: RPEEntry) => {
+    setEditingId(entry.id);
+    setEditForm({ ...entry });
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingId) return;
+    DataStore.updateRPEEntry(editingId, editForm);
+    setEditingId(null);
+    showToast('RPE entry updated!');
+    setRefreshTrigger((prev) => prev + 1);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm('Delete this RPE log entry?')) {
+      DataStore.deleteRPEEntry(id);
+      showToast('RPE log deleted');
+      setRefreshTrigger((prev) => prev + 1);
+    }
+  };
+
+  const allEntries = DataStore.getRPEEntries();
+
+  // Date constants for history filtering
+  const todayStr = '2026-08-11';
+  const yesterdayStr = '2026-08-10';
+
+  const filteredEntries = allEntries.filter((e) => {
+    if (timeFilter === 'today') return e.date === todayStr;
+    if (timeFilter === 'yesterday') return e.date === yesterdayStr;
+    if (timeFilter === 'week') {
+      const eDate = new Date(e.date).getTime();
+      const weekAgo = new Date('2026-08-04').getTime();
+      return eDate >= weekAgo;
+    }
+    return true;
+  }).sort((a, b) => b.date.localeCompare(a.date));
+
+  // Compute Team Average RPE per Date for Graphic
+  const dateGroups: { [date: string]: number[] } = {};
+  allEntries.forEach((e) => {
+    if (!dateGroups[e.date]) dateGroups[e.date] = [];
+    dateGroups[e.date].push(e.rpe_score);
+  });
+
+  const teamRPEChartData = Object.keys(dateGroups)
+    .sort()
+    .map((d) => {
+      const scores = dateGroups[d];
+      const avg = Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1));
+      return {
+        date: d,
+        'Team Avg RPE': avg,
+        entriesCount: scores.length,
+      };
     });
-    showToast('Wellness report successfully logged!');
-  };
 
-  const handleSaveSC = () => {
-    DataStore.saveSCIntervention({
-      player_id: scPlayerId,
-      date: rpeDate,
-      exercise: scExercise,
-      isometric_type: scType,
-      joint_angle: scAngle,
-      duration_s: scDuration,
-      sets: scSets,
-      target_area: scTarget,
-      reason: scReason,
-    });
-    showToast('S&C Isometric Intervention recorded!');
+  const getRPELabel = (score: number) => {
+    if (score <= 3) return { text: 'Very Light', color: 'text-emerald-400 bg-emerald-950/60 border-emerald-800' };
+    if (score <= 5) return { text: 'Moderate', color: 'text-amber-400 bg-amber-950/60 border-amber-800' };
+    if (score <= 7) return { text: 'Hard', color: 'text-orange-400 bg-orange-950/60 border-orange-800' };
+    if (score <= 9) return { text: 'Very Hard', color: 'text-rose-400 bg-rose-950/60 border-rose-800' };
+    return { text: 'Maximal Effort', color: 'text-purple-400 bg-purple-950/60 border-purple-800' };
   };
-
-  const rpeEntries = DataStore.getRPEEntries();
-  const wellnessEntries = DataStore.getWellnessEntries();
-  const scItems = DataStore.getSCInterventions();
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6 text-zinc-100">
-      {/* Toast */}
+    <div className="p-6 max-w-7xl mx-auto space-y-6 text-zinc-100">
+      {/* Toast Notification */}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-zinc-950 font-black px-4 py-2.5 rounded-lg shadow-2xl flex items-center space-x-2">
           <CheckCircle2 className="w-5 h-5" />
@@ -102,247 +141,306 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
         </div>
       )}
 
-      {/* Header */}
+      {/* Main Module Header */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="text-orange-500 text-xs font-black tracking-widest uppercase mb-1">
-            INTERNAL LOAD & S&C INTERVENTIONS
+            SUBJECTIVE INTERNAL LOAD TRACKER
           </div>
           <h1 className="text-2xl font-black text-white tracking-tight flex items-center space-x-2">
             <Activity className="w-6 h-6 text-orange-500" />
-            <span>PERFORMANCE & MONITORING MODULES</span>
+            <span>SESSION RPE TRACKER (BORG CR10)</span>
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
-            Log subjective internal load (RPE), daily wellness metrics, game contexts, and isometric interventions.
+            Track, edit, and analyze player-reported Rating of Perceived Exertion (RPE) to monitor internal load.
           </p>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800 text-xs font-bold">
-          <button
-            onClick={() => setActiveTab('rpe')}
-            className={`px-3 py-1.5 rounded transition-colors ${
-              activeTab === 'rpe' ? 'bg-orange-600 text-zinc-950 font-black' : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            RPE Scale
-          </button>
-          <button
-            onClick={() => setActiveTab('wellness')}
-            className={`px-3 py-1.5 rounded transition-colors ${
-              activeTab === 'wellness' ? 'bg-orange-600 text-zinc-950 font-black' : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            Wellness
-          </button>
-          <button
-            onClick={() => setActiveTab('sc')}
-            className={`px-3 py-1.5 rounded transition-colors ${
-              activeTab === 'sc' ? 'bg-orange-600 text-zinc-950 font-black' : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            S&C Interventions
-          </button>
         </div>
       </div>
 
-      {/* RPE Tab */}
-      {activeTab === 'rpe' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4 shadow-xl">
-            <h2 className="text-base font-black text-white flex items-center space-x-2">
-              <Activity className="w-5 h-5 text-orange-500" />
-              <span>LOG SESSION RPE (BORG CR10)</span>
-            </h2>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block text-zinc-400 font-bold mb-1">Athlete</label>
-                <select
-                  value={rpePlayerId}
-                  onChange={(e) => setRpePlayerId(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white font-bold"
-                >
-                  {roster.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.number} {p.displayName} ({p.position})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-zinc-400 font-bold mb-1">
-                  RPE Score (1 = Very Easy, 10 = Maximal Effort): <strong className="text-orange-400">{rpeScore}</strong>
-                </label>
-                <input
-                  type="range"
-                  min="1"
-                  max="10"
-                  value={rpeScore}
-                  onChange={(e) => setRpeScore(parseInt(e.target.value))}
-                  className="w-full accent-orange-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-zinc-400 font-bold mb-1">Notes</label>
-                <input
-                  type="text"
-                  value={rpeNotes}
-                  onChange={(e) => setRpeNotes(e.target.value)}
-                  placeholder="e.g. Felt heavy legs during 4th quarter drills"
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white"
-                />
-              </div>
-
-              <button
-                onClick={handleSaveRPE}
-                className="w-full bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black py-2.5 rounded-lg text-xs shadow-lg"
-              >
-                LOG RPE SCORE
-              </button>
-            </div>
+      {/* Team Average RPE Graphic */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl space-y-4">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <div className="flex items-center space-x-2">
+            <TrendingUp className="w-5 h-5 text-orange-500" />
+            <h2 className="text-base font-black text-white">TEAM AVERAGE RPE TREND GRAPHIC</h2>
           </div>
-
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4 shadow-xl">
-            <h2 className="text-base font-black text-white">RECENT RPE LOGS</h2>
-            {rpeEntries.length === 0 ? (
-              <div className="text-xs text-zinc-500 py-8 text-center">No RPE entries logged yet.</div>
-            ) : (
-              <div className="space-y-2 text-xs">
-                {rpeEntries.map((e) => {
-                  const p = roster.find((pl) => pl.id === e.player_id);
-                  return (
-                    <div key={e.id} className="bg-zinc-950 p-3 rounded border border-zinc-800 flex justify-between">
-                      <div>
-                        <span className="font-extrabold text-white">{p?.displayName || 'Athlete'}</span>
-                        <div className="text-[10px] text-zinc-500">{e.date} • {e.notes}</div>
-                      </div>
-                      <span className="text-orange-400 font-black text-base">{e.rpe_score}/10</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <span className="text-xs text-zinc-400 font-bold">Borg CR10 Scale (1–10)</span>
         </div>
-      )}
 
-      {/* Wellness Tab */}
-      {activeTab === 'wellness' && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4 shadow-xl max-w-xl mx-auto">
-          <h2 className="text-base font-black text-white flex items-center space-x-2">
-            <Heart className="w-5 h-5 text-rose-500" />
-            <span>DAILY ATHLETE WELLNESS MONITOR</span>
+        <div className="h-64 w-full">
+          {teamRPEChartData.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-xs text-zinc-500">
+              No RPE session data logged yet to display trend graphic.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={teamRPEChartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <XAxis dataKey="date" stroke="#a1a1aa" fontSize={11} tick={{ fill: '#d4d4d8' }} />
+                <YAxis domain={[0, 10]} stroke="#a1a1aa" fontSize={11} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#09090b',
+                    borderColor: '#27272a',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    fontSize: '12px',
+                  }}
+                />
+                <Bar dataKey="Team Avg RPE" fill="#f97316" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* Interactive Logging & History Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Log New RPE Entry Form */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4 shadow-xl">
+          <h2 className="text-base font-black text-white flex items-center space-x-2 border-b border-zinc-800 pb-3">
+            <Plus className="w-5 h-5 text-orange-500" />
+            <span>LOG NEW ATHLETE RPE</span>
           </h2>
 
           <div className="space-y-3 text-xs">
             <div>
               <label className="block text-zinc-400 font-bold mb-1">Athlete</label>
               <select
-                value={wellPlayerId}
-                onChange={(e) => setWellPlayerId(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white font-bold"
+                value={rpePlayerId}
+                onChange={(e) => setRpePlayerId(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2.5 text-white font-bold"
               >
                 {roster.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.number} {p.displayName}
+                    {p.number} {p.displayName} ({p.position})
                   </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-zinc-400 font-bold mb-1">Sleep Quality (1-10): {sleepScore}</label>
-              <input type="range" min="1" max="10" value={sleepScore} onChange={(e) => setSleepScore(parseInt(e.target.value))} className="w-full accent-orange-500" />
+              <label className="block text-zinc-400 font-bold mb-1">Session Date</label>
+              <input
+                type="date"
+                value={rpeDate}
+                onChange={(e) => setRpeDate(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2.5 text-white font-bold"
+              />
             </div>
 
             <div>
-              <label className="block text-zinc-400 font-bold mb-1">Muscle Soreness (1-10): {sorenessScore}</label>
-              <input type="range" min="1" max="10" value={sorenessScore} onChange={(e) => setSorenessScore(parseInt(e.target.value))} className="w-full accent-orange-500" />
-            </div>
-
-            <div>
-              <label className="block text-zinc-400 font-bold mb-1">Readiness Score (1-10): {readinessScore}</label>
-              <input type="range" min="1" max="10" value={readinessScore} onChange={(e) => setReadinessScore(parseInt(e.target.value))} className="w-full accent-orange-500" />
-            </div>
-
-            <button
-              onClick={handleSaveWellness}
-              className="w-full bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black py-2.5 rounded-lg text-xs shadow-lg"
-            >
-              SAVE WELLNESS REPORT
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* S&C Interventions Tab */}
-      {activeTab === 'sc' && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4 shadow-xl max-w-2xl mx-auto">
-          <h2 className="text-base font-black text-white flex items-center space-x-2">
-            <Dumbbell className="w-5 h-5 text-amber-500" />
-            <span>RECORD S&C ISOMETRIC INTERVENTION</span>
-          </h2>
-
-          <div className="space-y-3 text-xs">
-            <div>
-              <label className="block text-zinc-400 font-bold mb-1">Athlete</label>
-              <select
-                value={scPlayerId}
-                onChange={(e) => setScPlayerId(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white font-bold"
-              >
-                {roster.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.number} {p.displayName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-zinc-400 font-bold mb-1">Exercise Title</label>
-                <input
-                  type="text"
-                  value={scExercise}
-                  onChange={(e) => setScExercise(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white"
-                />
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-zinc-400 font-bold">RPE Score (1–10 Borg CR10):</label>
+                <span className="text-lg font-black text-orange-400">{rpeScore} / 10</span>
               </div>
-
-              <div>
-                <label className="block text-zinc-400 font-bold mb-1">Joint Angle / Position</label>
-                <input
-                  type="text"
-                  value={scAngle}
-                  onChange={(e) => setScAngle(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white"
-                />
+              <input
+                type="range"
+                min="1"
+                max="10"
+                value={rpeScore}
+                onChange={(e) => setRpeScore(parseInt(e.target.value))}
+                className="w-full accent-orange-500 cursor-pointer h-2 bg-zinc-800 rounded-lg"
+              />
+              <div className="flex justify-between text-[10px] text-zinc-500 mt-1 font-bold">
+                <span>1 (Rest/Easy)</span>
+                <span>5 (Hard)</span>
+                <span>10 (Maximal)</span>
               </div>
             </div>
 
             <div>
-              <label className="block text-zinc-400 font-bold mb-1">Target Area / Rationale</label>
+              <label className="block text-zinc-400 font-bold mb-1">Notes / Player Feedback</label>
               <input
                 type="text"
-                value={scReason}
-                onChange={(e) => setScReason(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white"
+                value={rpeNotes}
+                onChange={(e) => setRpeNotes(e.target.value)}
+                placeholder="e.g. Heavy legs post scrimmages, good cardio"
+                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2.5 text-white"
               />
             </div>
 
             <button
-              onClick={handleSaveSC}
-              className="w-full bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black py-2.5 rounded-lg text-xs shadow-lg"
+              id="log-rpe-submit-btn"
+              onClick={handleSaveRPE}
+              className="w-full bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black py-3 rounded-lg text-xs shadow-lg transition-colors flex items-center justify-center space-x-1.5"
             >
-              RECORD S&C INTERVENTION
+              <Plus className="w-4 h-4 stroke-[3]" />
+              <span>RECORD RPE SCORE</span>
             </button>
           </div>
         </div>
-      )}
+
+        {/* RPE History Log Table (Editable) */}
+        <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
+            <h2 className="text-base font-black text-white flex items-center space-x-2">
+              <Calendar className="w-5 h-5 text-orange-500" />
+              <span>RPE HISTORY & EDIT LOGS</span>
+            </h2>
+
+            {/* Time Filter Tabs */}
+            <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800 text-xs font-bold">
+              <button
+                onClick={() => setTimeFilter('all')}
+                className={`px-2.5 py-1 rounded transition-colors ${
+                  timeFilter === 'all' ? 'bg-orange-600 text-zinc-950 font-black' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setTimeFilter('today')}
+                className={`px-2.5 py-1 rounded transition-colors ${
+                  timeFilter === 'today' ? 'bg-orange-600 text-zinc-950 font-black' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                onClick={() => setTimeFilter('yesterday')}
+                className={`px-2.5 py-1 rounded transition-colors ${
+                  timeFilter === 'yesterday' ? 'bg-orange-600 text-zinc-950 font-black' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Yesterday
+              </button>
+              <button
+                onClick={() => setTimeFilter('week')}
+                className={`px-2.5 py-1 rounded transition-colors ${
+                  timeFilter === 'week' ? 'bg-orange-600 text-zinc-950 font-black' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Last 7 Days
+              </button>
+            </div>
+          </div>
+
+          {filteredEntries.length === 0 ? (
+            <div className="text-xs text-zinc-500 py-12 text-center">
+              No RPE entries found for selected filter timeframe.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-zinc-800">
+              <table className="w-full text-left text-xs text-zinc-300">
+                <thead className="bg-zinc-950 text-zinc-400 font-black uppercase text-[10px] border-b border-zinc-800">
+                  <tr>
+                    <th className="p-3">Athlete</th>
+                    <th className="p-3">Date</th>
+                    <th className="p-3">RPE Score</th>
+                    <th className="p-3">Category</th>
+                    <th className="p-3">Notes</th>
+                    <th className="p-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/80 bg-zinc-900">
+                  {filteredEntries.map((e) => {
+                    const isEditing = editingId === e.id;
+                    const p = roster.find((pl) => pl.id === e.player_id);
+                    const tag = getRPELabel(e.rpe_score);
+
+                    return (
+                      <tr key={e.id} className="hover:bg-zinc-800/50 transition-colors">
+                        <td className="p-3 font-extrabold text-white">
+                          <span className="text-orange-400 mr-1.5">{p?.number || ''}</span>
+                          {p?.displayName || 'Unknown Athlete'}
+                        </td>
+
+                        {isEditing ? (
+                          <>
+                            <td className="p-2">
+                              <input
+                                type="date"
+                                value={editForm.date || e.date}
+                                onChange={(evt) => setEditForm({ ...editForm, date: evt.target.value })}
+                                className="bg-zinc-950 border border-orange-500 rounded px-2 py-1 text-xs text-white"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                min="1"
+                                max="10"
+                                value={editForm.rpe_score ?? e.rpe_score}
+                                onChange={(evt) =>
+                                  setEditForm({
+                                    ...editForm,
+                                    rpe_score: parseInt(evt.target.value) || 1,
+                                  })
+                                }
+                                className="w-16 bg-zinc-950 border border-orange-500 rounded px-2 py-1 text-xs text-white font-bold"
+                              />
+                            </td>
+                            <td className="p-2 text-zinc-500">—</td>
+                            <td className="p-2">
+                              <input
+                                type="text"
+                                value={editForm.notes ?? e.notes ?? ''}
+                                onChange={(evt) => setEditForm({ ...editForm, notes: evt.target.value })}
+                                className="w-full bg-zinc-950 border border-orange-500 rounded px-2 py-1 text-xs text-white"
+                              />
+                            </td>
+                            <td className="p-2 text-right">
+                              <div className="flex items-center justify-end space-x-1">
+                                <button
+                                  onClick={handleSaveEdit}
+                                  className="bg-orange-600 text-zinc-950 font-black px-2.5 py-1 rounded text-[11px] flex items-center space-x-1"
+                                >
+                                  <Save className="w-3.5 h-3.5" />
+                                  <span>Save</span>
+                                </button>
+                                <button
+                                  onClick={() => setEditingId(null)}
+                                  className="text-zinc-400 hover:text-white p-1"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="p-3 text-zinc-400 font-medium">{e.date}</td>
+                            <td className="p-3">
+                              <span className="font-black text-white text-sm bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
+                                {e.rpe_score} / 10
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border ${tag.color}`}>
+                                {tag.text}
+                              </span>
+                            </td>
+                            <td className="p-3 text-zinc-300 max-w-xs truncate">{e.notes || '—'}</td>
+                            <td className="p-3 text-right">
+                              <div className="flex items-center justify-end space-x-2">
+                                <button
+                                  onClick={() => handleStartEdit(e)}
+                                  className="text-zinc-400 hover:text-orange-400 p-1 transition-colors"
+                                  title="Edit RPE entry"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(e.id)}
+                                  className="text-zinc-500 hover:text-rose-400 p-1 transition-colors"
+                                  title="Delete entry"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

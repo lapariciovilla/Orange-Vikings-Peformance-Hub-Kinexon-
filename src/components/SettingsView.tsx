@@ -12,6 +12,7 @@ import {
   FileSpreadsheet,
   History,
   Trash2,
+  Edit2,
 } from 'lucide-react';
 
 interface SettingsViewProps {
@@ -29,9 +30,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ roster, onRefresh })
   const [newPos, setNewPos] = useState('SF/PF');
   const [isAddingPlayer, setIsAddingPlayer] = useState(false);
 
+  // Edit Player State
+  const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
+  const [editPlayerForm, setEditPlayerForm] = useState<Partial<Player>>({});
+
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
+  };
+
+  const handleStartEditPlayer = (player: Player) => {
+    setEditingPlayerId(player.id);
+    setEditPlayerForm({
+      number: player.number,
+      displayName: player.displayName,
+      position: player.position,
+      status: player.status,
+    });
+  };
+
+  const handleSavePlayerEdit = (id: string) => {
+    DataStore.updatePlayer(id, editPlayerForm);
+    setEditingPlayerId(null);
+    onRefresh();
+    showToast('Player details updated!');
   };
 
   const handleSaveSettings = () => {
@@ -219,19 +241,116 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ roster, onRefresh })
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-          {roster.map((p) => (
-            <div key={p.id} className="bg-zinc-950 border border-zinc-800/80 p-3 rounded-lg flex items-center justify-between">
-              <div>
-                <span className="text-orange-400 font-black text-sm mr-2">{p.number}</span>
-                <span className="text-white font-bold">{p.displayName}</span>
-                <div className="text-[10px] text-zinc-500">{p.position}</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+          {roster.map((p) => {
+            const isEditing = editingPlayerId === p.id;
+
+            if (isEditing) {
+              return (
+                <div key={p.id} className="bg-zinc-950 border border-orange-500/80 p-3 rounded-lg space-y-2 col-span-1 sm:col-span-2 lg:col-span-1 shadow-lg">
+                  <div className="text-[11px] font-black text-orange-400">EDIT ATHLETE #{p.number}</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[10px] text-zinc-400 font-bold mb-0.5">Jersey #</label>
+                      <input
+                        type="text"
+                        value={editPlayerForm.number ?? p.number}
+                        onChange={(e) => setEditPlayerForm({ ...editPlayerForm, number: e.target.value })}
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white font-bold"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-[10px] text-zinc-400 font-bold mb-0.5">Display Name</label>
+                      <input
+                        type="text"
+                        value={editPlayerForm.displayName ?? p.displayName}
+                        onChange={(e) => setEditPlayerForm({ ...editPlayerForm, displayName: e.target.value })}
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] text-zinc-400 font-bold mb-0.5">Position</label>
+                      <select
+                        value={editPlayerForm.position ?? p.position}
+                        onChange={(e) => setEditPlayerForm({ ...editPlayerForm, position: e.target.value })}
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white"
+                      >
+                        <option value="PG">PG</option>
+                        <option value="SG">SG</option>
+                        <option value="SF">SF</option>
+                        <option value="PF">PF</option>
+                        <option value="C">C</option>
+                        <option value="SG/SF">SG/SF</option>
+                        <option value="PG/SG">PG/SG</option>
+                        <option value="SF/PF">SF/PF</option>
+                        <option value="C/PF">C/PF</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-zinc-400 font-bold mb-0.5">Status</label>
+                      <select
+                        value={editPlayerForm.status ?? p.status}
+                        onChange={(e) => setEditPlayerForm({ ...editPlayerForm, status: e.target.value as any })}
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white"
+                      >
+                        <option value="ACTIVE">ACTIVE</option>
+                        <option value="RESTING">RESTING</option>
+                        <option value="INJURED">INJURED</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end space-x-2 pt-1">
+                    <button
+                      onClick={() => setEditingPlayerId(null)}
+                      className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1 rounded text-xs"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleSavePlayerEdit(p.id)}
+                      className="bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black px-3 py-1 rounded text-xs flex items-center space-x-1"
+                    >
+                      <Save className="w-3 h-3" />
+                      <span>Save</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={p.id} className="bg-zinc-950 border border-zinc-800/80 p-3 rounded-lg flex items-center justify-between group hover:border-zinc-700 transition-colors">
+                <div>
+                  <span className="text-orange-400 font-black text-sm mr-2">{p.number}</span>
+                  <span className="text-white font-bold">{p.displayName}</span>
+                  <div className="text-[10px] text-zinc-500">{p.position}</div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                    p.status === 'ACTIVE'
+                      ? 'text-emerald-400 bg-emerald-950/60 border-emerald-800/60'
+                      : p.status === 'INJURED'
+                      ? 'text-rose-400 bg-rose-950/60 border-rose-800/60'
+                      : 'text-amber-400 bg-amber-950/60 border-amber-800/60'
+                  }`}>
+                    {p.status || 'ACTIVE'}
+                  </span>
+                  <button
+                    onClick={() => handleStartEditPlayer(p)}
+                    className="text-zinc-500 hover:text-orange-400 p-1 transition-colors"
+                    title="Edit Player"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
-              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded">
-                ACTIVE
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

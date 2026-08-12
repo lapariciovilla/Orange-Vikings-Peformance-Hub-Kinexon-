@@ -9,13 +9,18 @@ import {
   Bot,
   Activity,
   Sliders,
-  Database,
-  Flame,
+  X,
+  Trophy,
+  CalendarDays,
+  FileText,
 } from 'lucide-react';
 
 export type ActiveTab =
   | 'dashboard'
   | 'import'
+  | 'games'
+  | 'calendar'
+  | 'reports'
   | 'sessions'
   | 'players'
   | 'analytics'
@@ -28,42 +33,64 @@ interface SidebarProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   sessionCount: number;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, sessionCount }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  activeTab,
+  setActiveTab,
+  sessionCount,
+  isMobileOpen = false,
+  onCloseMobile,
+}) => {
   const navItems = [
     { id: 'dashboard', label: "TODAY'S LOAD", icon: LayoutDashboard },
     { id: 'import', label: 'IMPORT KINEXON CSV', icon: Upload, highlight: true },
+    { id: 'games', label: 'GAME LOAD', icon: Trophy },
+    { id: 'calendar', label: 'MONTHLY CALENDAR', icon: CalendarDays },
+    { id: 'reports', label: 'S&C REPORT GENERATOR', icon: FileText },
     { id: 'sessions', label: 'SESSION HISTORY', icon: Calendar, badge: sessionCount },
     { id: 'players', label: 'PLAYER PROFILES', icon: User },
     { id: 'analytics', label: 'TEAM ANALYTICS', icon: LineChart },
     { id: 'comparison', label: 'PLAYER COMPARISON', icon: GitCompare },
     { id: 'ai_analyst', label: 'AI PERFORMANCE ANALYST', icon: Bot },
-    { id: 'future_modules', label: 'RPE & S&C MODULES', icon: Activity },
+    { id: 'future_modules', label: 'RPE LOGS & TRENDS', icon: Activity },
     { id: 'settings', label: 'SETTINGS & EXPORT', icon: Sliders },
   ];
 
-  return (
-    <aside className="w-64 bg-zinc-950 border-r border-zinc-800 text-zinc-300 flex flex-col h-screen shrink-0 sticky top-0 select-none">
+  const sidebarContent = (
+    <aside className="w-64 bg-zinc-950 border-r border-zinc-800 text-zinc-300 flex flex-col h-full shrink-0 select-none">
       {/* Branding Header */}
-      <div className="p-5 border-b border-zinc-800 bg-zinc-950">
-        <div className="flex items-center space-x-2.5">
-          <div className="w-9 h-9 rounded-lg bg-orange-600 flex items-center justify-center text-black font-black text-xl shadow-lg shadow-orange-950/40">
-            <Flame className="w-5 h-5 text-zinc-950 fill-zinc-950" />
-          </div>
+      <div className="p-4 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <img
+            src="https://i.postimg.cc/QxTv6dV1/icon-ogp.webp"
+            alt="Orange Vikings Logo"
+            referrerPolicy="no-referrer"
+            className="w-10 h-10 object-contain rounded-lg bg-zinc-900 p-1 border border-orange-500/40 shadow-lg shadow-orange-950/50"
+          />
           <div>
-            <div className="text-orange-500 font-extrabold tracking-wider text-xs uppercase">
+            <div className="text-orange-500 font-extrabold tracking-wider text-[10px] uppercase">
               ORANGE VIKINGS
             </div>
-            <div className="text-white font-black text-lg tracking-tight leading-none">
+            <div className="text-white font-black text-base tracking-tight leading-none">
               PERFORMANCE HUB
+            </div>
+            <div className="text-[10px] text-zinc-400 font-bold mt-0.5">
+              2026–27 KINEXON S&C
             </div>
           </div>
         </div>
-        <div className="mt-3 text-[11px] font-medium text-zinc-400 bg-zinc-900/80 px-2.5 py-1 rounded border border-zinc-800/80 flex items-center justify-between">
-          <span>KINEXON MONITORING</span>
-          <span className="text-orange-400 font-bold">2026–27</span>
-        </div>
+
+        {onCloseMobile && (
+          <button
+            onClick={onCloseMobile}
+            className="md:hidden text-zinc-400 hover:text-white p-1"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
       {/* Navigation Menu */}
@@ -75,8 +102,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, sessi
             <button
               key={item.id}
               id={`nav-${item.id}`}
-              onClick={() => setActiveTab(item.id as ActiveTab)}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-md text-xs font-bold tracking-wide transition-all duration-150 ${
+              onClick={() => {
+                setActiveTab(item.id as ActiveTab);
+                if (onCloseMobile) onCloseMobile();
+              }}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-xs font-bold tracking-wide transition-all duration-150 ${
                 isActive
                   ? 'bg-orange-600 text-zinc-950 shadow-md shadow-orange-950/30 font-extrabold'
                   : item.highlight
@@ -85,7 +115,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, sessi
               }`}
             >
               <div className="flex items-center space-x-2.5">
-                <Icon className={`w-4 h-4 ${isActive ? 'text-zinc-950' : item.highlight ? 'text-orange-400' : 'text-zinc-400'}`} />
+                <Icon
+                  className={`w-4 h-4 ${
+                    isActive ? 'text-zinc-950' : item.highlight ? 'text-orange-400' : 'text-zinc-400'
+                  }`}
+                />
                 <span>{item.label}</span>
               </div>
               {item.badge !== undefined && (
@@ -109,9 +143,31 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, sessi
           <span className="truncate">Luis Aparicio Villa</span>
         </div>
         <div className="text-[10px] text-zinc-500 mt-0.5 truncate">
-          Strength & Conditioning | Matsuyama
+          Strength & Conditioning Coach
         </div>
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <div className="hidden md:block h-screen sticky top-0 shrink-0">
+        {sidebarContent}
+      </div>
+
+      {/* Mobile Drawer Overlay */}
+      {isMobileOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <div
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={onCloseMobile}
+          />
+          <div className="relative w-64 max-w-xs z-10 h-full">
+            {sidebarContent}
+          </div>
+        </div>
+      )}
+    </>
   );
 };

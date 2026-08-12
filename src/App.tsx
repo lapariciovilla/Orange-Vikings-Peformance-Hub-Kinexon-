@@ -3,6 +3,9 @@ import { Sidebar, ActiveTab } from './components/Sidebar';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
 import { CSVImportView } from './components/CSVImportView';
+import { GamesView } from './components/GamesView';
+import { CalendarView } from './components/CalendarView';
+import { ReportGeneratorView } from './components/ReportGeneratorView';
 import { SessionHistoryView } from './components/SessionHistoryView';
 import { PlayerProfileView } from './components/PlayerProfileView';
 import { TeamAnalyticsView } from './components/TeamAnalyticsView';
@@ -18,6 +21,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [currentDate, setCurrentDate] = useState<string>('2026-08-11');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('p4'); // #8 Ryuji Aoki
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Data Store State
   const [roster, setRoster] = useState<Player[]>([]);
@@ -53,6 +57,9 @@ export default function App() {
 
   const availableDates = Array.from(new Set(sessions.map((s) => s.date))).sort().reverse();
 
+  // Show date picker only on views where session date context is relevant
+  const showHeaderDatePicker = ['dashboard', 'sessions', 'analytics'].includes(activeTab);
+
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden select-none">
       {/* Sidebar Navigation */}
@@ -60,6 +67,8 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         sessionCount={sessions.length}
+        isMobileOpen={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
 
       {/* Main Content Area */}
@@ -69,6 +78,9 @@ export default function App() {
           onDateChange={setCurrentDate}
           availableDates={availableDates.length > 0 ? availableDates : ['2026-08-11']}
           onOpenImport={() => setActiveTab('import')}
+          showDatePicker={showHeaderDatePicker}
+          onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          isMobileMenuOpen={isMobileMenuOpen}
         />
 
         <main className="flex-1 pb-12">
@@ -94,6 +106,12 @@ export default function App() {
               }}
             />
           )}
+
+          {activeTab === 'games' && <GamesView roster={roster} />}
+
+          {activeTab === 'calendar' && <CalendarView roster={roster} />}
+
+          {activeTab === 'reports' && <ReportGeneratorView roster={roster} />}
 
           {activeTab === 'sessions' && (
             <SessionHistoryView

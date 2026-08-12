@@ -174,10 +174,10 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
         })}
       </div>
 
-      {/* Session Details Drawer / Modal */}
+      {/* Session Details Modal (Centered in the middle of the screen) */}
       {selectedSessionId && selectedMeta && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-end">
-          <div className="w-full max-w-4xl bg-zinc-950 h-full border-l border-zinc-800 p-6 overflow-y-auto space-y-6 text-zinc-100 animate-in slide-in-from-right duration-200">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 md:p-6">
+          <div className="w-full max-w-5xl max-h-[90vh] bg-zinc-950 border border-zinc-800 rounded-2xl p-6 overflow-y-auto shadow-2xl space-y-6 text-zinc-100 animate-in zoom-in-95 duration-200">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
               <div>

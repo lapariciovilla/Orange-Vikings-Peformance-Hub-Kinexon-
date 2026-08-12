@@ -208,37 +208,157 @@ export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ play
         ))}
       </div>
 
-      {/* Visual Bar Comparison */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl space-y-4">
-        <h2 className="text-base font-black text-white tracking-tight">
-          COMPARATIVE EXTERNAL LOAD PROFILE
+      {/* Visual Bar Comparison - 1 Metric per Graphic */}
+      <div className="space-y-6">
+        <h2 className="text-lg font-black text-white tracking-tight flex items-center space-x-2">
+          <span>INDIVIDUAL METRIC COMPARISON GRAPHICS</span>
         </h2>
-        <div className="h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartDataset} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-              <XAxis dataKey="metric" stroke="#71717a" fontSize={11} />
-              <YAxis stroke="#71717a" fontSize={11} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#09090b',
-                  borderColor: '#27272a',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  color: '#fff',
-                }}
-              />
-              <Legend />
-              {compareData.map((d, i) => (
-                <Bar
-                  key={d.player.id}
-                  dataKey={d.player.displayName}
-                  fill={BAR_COLORS[i % BAR_COLORS.length]}
-                  radius={[4, 4, 0, 0]}
-                />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Graphic 1: Distance */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-xl space-y-3">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <h3 className="text-sm font-black text-amber-400 uppercase tracking-wider">
+                1. Total Distance (Meters)
+              </h3>
+              <span className="text-[10px] text-zinc-500 font-bold">KINEXON External Volume</span>
+            </div>
+            <div className="h-56 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={compareData.map((d) => ({
+                    name: `#${d.player.number} ${d.player.displayName}`,
+                    'Distance (m)': d.latest?.distance_m || 0,
+                  }))}
+                  margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis dataKey="name" stroke="#a1a1aa" fontSize={11} tick={{ fill: '#d4d4d8' }} />
+                  <YAxis stroke="#a1a1aa" fontSize={11} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }}
+                  />
+                  <Bar dataKey="Distance (m)" fill="#f59e0b" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Graphic 2: Acceleration Load */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-xl space-y-3">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <h3 className="text-sm font-black text-orange-400 uppercase tracking-wider">
+                2. Accumulated Acceleration Load
+              </h3>
+              <span className="text-[10px] text-zinc-500 font-bold">Explosive Burst Demand</span>
+            </div>
+            <div className="h-56 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={compareData.map((d) => ({
+                    name: `#${d.player.number} ${d.player.displayName}`,
+                    'Accel Load': d.latest?.accumulated_acceleration_load || 0,
+                  }))}
+                  margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis dataKey="name" stroke="#a1a1aa" fontSize={11} tick={{ fill: '#d4d4d8' }} />
+                  <YAxis stroke="#a1a1aa" fontSize={11} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }}
+                  />
+                  <Bar dataKey="Accel Load" fill="#ea580c" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Graphic 3: Deceleration Load */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-xl space-y-3">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <h3 className="text-sm font-black text-rose-400 uppercase tracking-wider">
+                3. Deceleration Load (Braking Demand)
+              </h3>
+              <span className="text-[10px] text-zinc-500 font-bold">Eccentric Muscular Strain</span>
+            </div>
+            <div className="h-56 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={compareData.map((d) => ({
+                    name: `#${d.player.number} ${d.player.displayName}`,
+                    'Decel Load': d.latest?.deceleration_load || 0,
+                  }))}
+                  margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis dataKey="name" stroke="#a1a1aa" fontSize={11} tick={{ fill: '#d4d4d8' }} />
+                  <YAxis stroke="#a1a1aa" fontSize={11} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }}
+                  />
+                  <Bar dataKey="Decel Load" fill="#f43f5e" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Graphic 4: Jump Load */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-xl space-y-3">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <h3 className="text-sm font-black text-purple-400 uppercase tracking-wider">
+                4. Jump Load
+              </h3>
+              <span className="text-[10px] text-zinc-500 font-bold">Vertical Impact Accumulation</span>
+            </div>
+            <div className="h-56 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={compareData.map((d) => ({
+                    name: `#${d.player.number} ${d.player.displayName}`,
+                    'Jump Load': d.latest?.jump_load || 0,
+                  }))}
+                  margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis dataKey="name" stroke="#a1a1aa" fontSize={11} tick={{ fill: '#d4d4d8' }} />
+                  <YAxis stroke="#a1a1aa" fontSize={11} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }}
+                  />
+                  <Bar dataKey="Jump Load" fill="#a855f7" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Graphic 5: Mechanical Load */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-xl space-y-3 lg:col-span-2">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <h3 className="text-sm font-black text-sky-400 uppercase tracking-wider">
+                5. Total Mechanical Load
+              </h3>
+              <span className="text-[10px] text-zinc-500 font-bold">Combined Biomechanical Intensity</span>
+            </div>
+            <div className="h-56 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={compareData.map((d) => ({
+                    name: `#${d.player.number} ${d.player.displayName}`,
+                    'Mech Load': d.latest?.mechanical_load || 0,
+                  }))}
+                  margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis dataKey="name" stroke="#a1a1aa" fontSize={11} tick={{ fill: '#d4d4d8' }} />
+                  <YAxis stroke="#a1a1aa" fontSize={11} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }}
+                  />
+                  <Bar dataKey="Mech Load" fill="#38bdf8" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </div>
       </div>
 

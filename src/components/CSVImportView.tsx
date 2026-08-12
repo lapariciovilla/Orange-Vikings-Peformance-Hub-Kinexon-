@@ -79,7 +79,7 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
     reader.readAsText(file);
   };
 
-  const parseCSVContent = (content: string) => {
+  const parseCSVContent = (content: string, name?: string) => {
     Papa.parse(content, {
       header: true,
       skipEmptyLines: true,
@@ -99,6 +99,26 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
           if (lower.includes('jump')) setColJump(f);
           if (lower.includes('mech')) setColMech(f);
         });
+
+        // Automatic Session Type Detection (Game vs Practice vs Conditioning)
+        const combinedText = `${name || fileName} ${content.slice(0, 1000)}`.toLowerCase();
+        if (
+          combinedText.includes('game') ||
+          combinedText.includes(' vs ') ||
+          combinedText.includes('match') ||
+          combinedText.includes('opponent') ||
+          combinedText.includes('bleague') ||
+          combinedText.includes('b.league')
+        ) {
+          setSessionType('Game');
+          setSessionName('B.LEAGUE Official Game Session (KINEXON)');
+        } else if (combinedText.includes('conditioning') || combinedText.includes('s&c')) {
+          setSessionType('Conditioning');
+          setSessionName('Conditioning & High-Density Session');
+        } else {
+          setSessionType('Practice');
+          setSessionName('Monitored Tactical Practice');
+        }
 
         setStep(2);
       },

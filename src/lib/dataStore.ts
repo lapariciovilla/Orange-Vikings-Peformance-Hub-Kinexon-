@@ -14,6 +14,7 @@ import {
   INITIAL_SESSIONS_META,
   INITIAL_PLAYER_RECORDS,
   DEFAULT_SETTINGS,
+  INITIAL_RPE_ENTRIES,
 } from '../data/initialData';
 
 const STORAGE_KEYS = {
@@ -254,19 +255,39 @@ export class DataStore {
 
   // --- RPE ---
   static getRPEEntries(): RPEEntry[] {
-    return getStored<RPEEntry[]>(STORAGE_KEYS.RPE_ENTRIES, []);
+    return getStored<RPEEntry[]>(STORAGE_KEYS.RPE_ENTRIES, INITIAL_RPE_ENTRIES);
   }
 
   static saveRPEEntry(entry: Omit<RPEEntry, 'id' | 'created_at'>): RPEEntry {
     const entries = this.getRPEEntries();
     const newEntry: RPEEntry = {
       ...entry,
-      id: `rpe_${Date.now()}`,
+      id: `rpe_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       created_at: new Date().toISOString(),
     };
     entries.push(newEntry);
     setStored(STORAGE_KEYS.RPE_ENTRIES, entries);
+    this.addAuditLog('SAVE_RPE', `Saved RPE ${entry.rpe_score}/10 for date ${entry.date}`);
     return newEntry;
+  }
+
+  static updateRPEEntry(id: string, updates: Partial<RPEEntry>): RPEEntry | null {
+    const entries = this.getRPEEntries();
+    const idx = entries.findIndex((e) => e.id === id);
+    if (idx === -1) return null;
+    entries[idx] = { ...entries[idx], ...updates };
+    setStored(STORAGE_KEYS.RPE_ENTRIES, entries);
+    this.addAuditLog('UPDATE_RPE', `Updated RPE entry ${id}`);
+    return entries[idx];
+  }
+
+  static deleteRPEEntry(id: string): boolean {
+    const entries = this.getRPEEntries();
+    const filtered = entries.filter((e) => e.id !== id);
+    if (filtered.length === entries.length) return false;
+    setStored(STORAGE_KEYS.RPE_ENTRIES, filtered);
+    this.addAuditLog('DELETE_RPE', `Deleted RPE entry ${id}`);
+    return true;
   }
 
   // --- WELLNESS ---
