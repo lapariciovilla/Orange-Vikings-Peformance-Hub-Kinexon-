@@ -1,0 +1,6 @@
+{
+  "name": "Orange Vikings Performance Hub",
+  "description": "Kinexon Performance & Load Monitoring for Ehime Orange Vikings (2026-2027)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
