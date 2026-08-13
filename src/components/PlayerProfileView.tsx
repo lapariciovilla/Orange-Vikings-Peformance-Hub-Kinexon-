@@ -9,20 +9,14 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
-  BarChart,
-  Bar,
 } from 'recharts';
 import {
-  User,
   Activity,
-  Zap,
-  ArrowDownCircle,
-  TrendingUp,
-  Shield,
-  Calendar,
   AlertCircle,
-  Info,
   CheckCircle2,
+  Clock,
+  Gauge,
+  Flame,
 } from 'lucide-react';
 
 interface PlayerProfileViewProps {
@@ -31,42 +25,24 @@ interface PlayerProfileViewProps {
   onSelectPlayer: (id: string) => void;
 }
 
-type TimeFrame = 'TODAY' | '7D' | '14D' | '28D' | 'SEASON';
+type SessionFilter = 'LAST 5' | 'LAST 10' | 'LAST 20' | 'ALL';
 
 export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
   players,
   selectedPlayerId,
   onSelectPlayer,
 }) => {
-  const [timeframe, setTimeframe] = useState<TimeFrame>('SEASON');
+  const [sessionFilter, setSessionFilter] = useState<SessionFilter>('ALL');
   const [activeMetricTab, setActiveMetricTab] = useState<keyof CoreMetrics>('distance_m');
 
   const player = players.find((p) => p.id === selectedPlayerId) || players[0];
   const allRecords = DataStore.getRecordsForPlayer(player?.id || '');
 
-  // Filter records based on timeframe
-  const filteredRecords = allRecords.filter((r) => {
-    if (timeframe === 'TODAY') return r.date === '2026-08-11';
-    if (timeframe === '7D') {
-      const d = new Date(r.date);
-      const limit = new Date('2026-08-11');
-      limit.setDate(limit.getDate() - 7);
-      return d >= limit;
-    }
-    if (timeframe === '14D') {
-      const d = new Date(r.date);
-      const limit = new Date('2026-08-11');
-      limit.setDate(limit.getDate() - 14);
-      return d >= limit;
-    }
-    if (timeframe === '28D') {
-      const d = new Date(r.date);
-      const limit = new Date('2026-08-11');
-      limit.setDate(limit.getDate() - 28);
-      return d >= limit;
-    }
-    return true; // SEASON
-  });
+  // Filter records based on count
+  const filteredRecords = allRecords.slice(
+    0,
+    sessionFilter === 'LAST 5' ? 5 : sessionFilter === 'LAST 10' ? 10 : sessionFilter === 'LAST 20' ? 20 : allRecords.length
+  );
 
   // Calculate stats for selected metric
   const validMetricVals = filteredRecords
@@ -81,19 +57,34 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
       ? Number((validMetricVals.reduce((a, b) => a + b, 0) / validMetricVals.length).toFixed(1))
       : null;
 
-  const loadStatus = DataStore.getPlayerLoadStatus(player?.id || '', currentVal, activeMetricTab);
+  const flagEvaluation = DataStore.evaluateMetricFlag(player?.id || '', currentVal, activeMetricTab);
 
   // Chart Data preparation (chronological order)
   const chartData = [...filteredRecords]
     .reverse()
-    .map((r) => ({
-      date: r.date,
-      distance: r.distance_m || 0,
-      accel: r.accumulated_acceleration_load || 0,
-      decel: r.deceleration_load || 0,
-      jump: r.jump_load || 0,
-      mech: r.mechanical_load || 0,
-    }));
+    .map((r) => {
+      const minutes = r.session_type === 'Game' && r.game_minutes && r.game_minutes > 0
+        ? r.game_minutes
+        : (r.duration_min && r.duration_min > 0 ? r.duration_min : 1);
+
+      return {
+        date: r.date,
+        session_type: r.session_type,
+        distance: r.distance_m || 0,
+        accel: r.accumulated_acceleration_load || 0,
+        decel: r.deceleration_load || 0,
+        jump: r.jump_load || 0,
+        mech: r.mechanical_load || 0,
+        distance_pm: r.distance_m ? Number((r.distance_m / minutes).toFixed(1)) : 0,
+        accel_pm: r.accumulated_acceleration_load ? Number((r.accumulated_acceleration_load / minutes).toFixed(2)) : 0,
+        decel_pm: r.deceleration_load ? Number((r.deceleration_load / minutes).toFixed(2)) : 0,
+        jump_pm: r.jump_load ? Number((r.jump_load / minutes).toFixed(2)) : 0,
+        mech_pm: r.mechanical_load ? Number((r.mechanical_load / minutes).toFixed(2)) : 0,
+        rpe: r.RPE || null,
+      };
+    });
+
+  const latestRecord = allRecords.length > 0 ? allRecords[0] : null;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 text-zinc-100">
@@ -124,7 +115,7 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
           </div>
         </div>
 
-        {/* Player Selector & Timeframes */}
+        {/* Player Selector & Filters */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <select
             id="player-profile-selector"
@@ -140,17 +131,17 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
           </select>
 
           <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800 text-xs">
-            {(['TODAY', '7D', '14D', '28D', 'SEASON'] as TimeFrame[]).map((tf) => (
+            {(['LAST 5', 'LAST 10', 'LAST 20', 'ALL'] as SessionFilter[]).map((sf) => (
               <button
-                key={tf}
-                onClick={() => setTimeframe(tf)}
+                key={sf}
+                onClick={() => setSessionFilter(sf)}
                 className={`px-2.5 py-1.5 rounded font-bold transition-colors ${
-                  timeframe === tf
+                  sessionFilter === sf
                     ? 'bg-orange-600 text-zinc-950 font-extrabold'
                     : 'text-zinc-400 hover:text-white'
                 }`}
               >
-                {tf}
+                {sf}
               </button>
             ))}
           </div>
@@ -163,29 +154,29 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
           <Activity className="w-5 h-5 text-orange-500" />
           <div>
             <div className="text-xs font-black text-white uppercase tracking-wider">
-              INDIVIDUAL LOAD MONITORING STATUS
+              INDIVIDUAL BASELINE & RELATIVE FLAG EVALUATION
             </div>
             <div className="text-xs text-zinc-400">
-              Contextual assessment relative to {player.displayName}'s historical baseline.
+              {flagEvaluation.reason}
             </div>
           </div>
         </div>
 
         <div>
-          {loadStatus.status === 'BASELINE BUILDING' ? (
+          {flagEvaluation.status === 'INSUFFICIENT_HISTORY' ? (
             <div className="flex items-center space-x-2 bg-amber-950/80 border border-amber-800 text-amber-300 px-3 py-1.5 rounded-lg text-xs font-bold">
               <AlertCircle className="w-4 h-4 text-amber-400" />
-              <span>BASELINE BUILDING ({allRecords.length}/5 minimum sessions collected)</span>
+              <span>INSUFFICIENT HISTORY (&lt; 3 SESSIONS)</span>
             </div>
-          ) : loadStatus.status === 'RED' ? (
+          ) : flagEvaluation.status === 'RED' ? (
             <div className="flex items-center space-x-2 bg-rose-950/80 border border-rose-800 text-rose-300 px-3 py-1.5 rounded-lg text-xs font-black">
               <AlertCircle className="w-4 h-4 text-rose-400" />
-              <span>HIGH / UNUSUAL EXPOSURE (+{loadStatus.pctChange}% vs baseline)</span>
+              <span>HIGH / UNUSUAL EXPOSURE (+{flagEvaluation.pctChange}%)</span>
             </div>
-          ) : loadStatus.status === 'YELLOW' ? (
+          ) : flagEvaluation.status === 'YELLOW' ? (
             <div className="flex items-center space-x-2 bg-amber-950/80 border border-amber-800 text-amber-300 px-3 py-1.5 rounded-lg text-xs font-black">
               <AlertCircle className="w-4 h-4 text-amber-400" />
-              <span>ELEVATED LOAD (+{loadStatus.pctChange}% vs baseline)</span>
+              <span>ELEVATED EXPOSURE (+{flagEvaluation.pctChange}%)</span>
             </div>
           ) : (
             <div className="flex items-center space-x-2 bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-3 py-1.5 rounded-lg text-xs font-black">
@@ -196,10 +187,10 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
         </div>
       </div>
 
-      {/* Stats Cards Grid */}
+      {/* Stats Cards Grid (Absolute + Relative Exposure) */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-          <span className="text-[10px] text-zinc-500 font-extrabold uppercase">CURRENT SESSION</span>
+          <span className="text-[10px] text-zinc-500 font-extrabold uppercase">LATEST ABSOLUTE LOAD</span>
           <div className="text-xl font-black text-orange-400 mt-1">
             {currentVal !== null
               ? activeMetricTab === 'distance_m'
@@ -207,21 +198,34 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
                 : `${currentVal} au`
               : 'N/A'}
           </div>
+          {latestRecord?.relative && (
+            <div className="text-[10px] text-zinc-400 font-semibold mt-1">
+              Relative:{' '}
+              <span className="text-white font-bold">
+                {activeMetricTab === 'distance_m'
+                  ? `${latestRecord.relative.distance_per_min} m/min`
+                  : activeMetricTab === 'accumulated_acceleration_load'
+                  ? `${latestRecord.relative.accel_load_per_min} au/min`
+                  : activeMetricTab === 'deceleration_load'
+                  ? `${latestRecord.relative.decel_load_per_min} au/min`
+                  : activeMetricTab === 'jump_load'
+                  ? `${latestRecord.relative.jump_load_per_min} au/min`
+                  : `${latestRecord.relative.mechanical_load_per_min} au/min`}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-          <span className="text-[10px] text-zinc-500 font-extrabold uppercase">PERIOD AVERAGE</span>
+          <span className="text-[10px] text-zinc-500 font-extrabold uppercase">INDIVIDUAL BASELINE</span>
           <div className="text-xl font-black text-amber-400 mt-1">
-            {avgVal !== null
-              ? activeMetricTab === 'distance_m'
-                ? `${avgVal.toLocaleString()} m`
-                : `${avgVal} au`
-              : 'N/A'}
+            {flagEvaluation.baselineValue !== null ? `${flagEvaluation.baselineValue}` : 'Building...'}
           </div>
+          <div className="text-[10px] text-zinc-500 mt-1">Recent 3-Session Avg</div>
         </div>
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-          <span className="text-[10px] text-zinc-500 font-extrabold uppercase">SEASON HIGHEST</span>
+          <span className="text-[10px] text-zinc-500 font-extrabold uppercase">HIGHEST EXPOSURE</span>
           <div className="text-xl font-black text-rose-400 mt-1">
             {highestVal !== null
               ? activeMetricTab === 'distance_m'
@@ -232,18 +236,15 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
         </div>
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-          <span className="text-[10px] text-zinc-500 font-extrabold uppercase">SEASON LOWEST</span>
-          <div className="text-xl font-black text-emerald-400 mt-1">
-            {lowestVal !== null
-              ? activeMetricTab === 'distance_m'
-                ? `${lowestVal.toLocaleString()} m`
-                : `${lowestVal} au`
-              : 'N/A'}
+          <span className="text-[10px] text-zinc-500 font-extrabold uppercase">SUBJECTIVE RPE</span>
+          <div className="text-xl font-black text-purple-400 mt-1">
+            {latestRecord?.RPE ? `${latestRecord.RPE}/10` : 'Not Logged'}
           </div>
+          <div className="text-[10px] text-zinc-500 mt-1">Internal Load Score</div>
         </div>
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-          <span className="text-[10px] text-zinc-500 font-extrabold uppercase">TOTAL SESSIONS</span>
+          <span className="text-[10px] text-zinc-500 font-extrabold uppercase">MONITORED SESSIONS</span>
           <div className="text-xl font-black text-white mt-1">{filteredRecords.length}</div>
         </div>
       </div>
@@ -253,10 +254,10 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
           <div>
             <h2 className="text-base font-black text-white tracking-tight">
-              LONGITUDINAL EXTERNAL LOAD TREND
+              LONGITUDINAL EXTERNAL LOAD TRAJECTORY
             </h2>
             <p className="text-xs text-zinc-400">
-              Track {player.displayName}'s workload trajectory over time
+              Track {player.displayName}'s workload volume & intensity over time
             </p>
           </div>
 

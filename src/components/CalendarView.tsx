@@ -104,9 +104,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
           <div className="flex items-center space-x-3">
             <div className="bg-orange-500 text-zinc-950 font-black px-3 py-1 rounded-md text-xs tracking-wider uppercase flex items-center space-x-1 shadow-lg">
               <Award className="w-4 h-4" />
-              <span>S&C ATHLETE OF THE MONTH</span>
+              <span>MONTHLY LOAD LEADERS</span>
             </div>
-            <span className="text-xs text-orange-400 font-extrabold">AUGUST 2026 HIGH-VOLUME PERFORMER</span>
+            <span className="text-xs text-orange-400 font-extrabold">AUGUST 2026 TOP EXTERNAL WORKLOAD ATHELTES</span>
           </div>
           <div className="text-xs text-zinc-400 font-bold">
             Based on KINEXON External Workload & Consistency

@@ -58,7 +58,6 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
       session_id: `session-${rpeDate}`,
       date: rpeDate,
       rpe_score: rpeScore,
-      rpe_scale: 'Borg CR10',
       notes: rpeNotes || 'Regular training session',
     });
     setRpeNotes('');

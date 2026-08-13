@@ -17,12 +17,21 @@ export interface Player {
   notes?: string;
 }
 
+// The 5 primary KINEXON external-load metrics
 export interface CoreMetrics {
   distance_m: number | null;
   accumulated_acceleration_load: number | null;
+  mechanical_load: number | null;
   deceleration_load: number | null;
   jump_load: number | null;
-  mechanical_load: number | null;
+}
+
+export interface RelativeMetrics {
+  distance_per_min: number | null;
+  accel_load_per_min: number | null;
+  mechanical_load_per_min: number | null;
+  decel_load_per_min: number | null;
+  jump_load_per_min: number | null;
 }
 
 export interface PlayerSessionRecord extends CoreMetrics {
@@ -37,16 +46,16 @@ export interface PlayerSessionRecord extends CoreMetrics {
   player_name: string;
   position: string;
   
-  // Future / extended fields
+  // Exposure & Internal Load
+  duration_min?: number | null;
   game_minutes?: number | null;
   RPE?: number | null;
-  wellness?: number | null;
-  training_duration_min?: number | null;
-  high_speed_running_m?: number | null;
-  maximum_speed_kmh?: number | null;
-  notes?: string | null;
-  coach_notes?: string | null;
+  sRPE?: number | null;
 
+  // Relative Exposure Metrics
+  relative?: RelativeMetrics;
+
+  notes?: string | null;
   source: 'CSV' | 'MANUAL' | 'INITIAL' | 'API';
   created_at: string;
   updated_at?: string;
@@ -59,6 +68,7 @@ export interface SessionMeta {
   season: string;
   session_type: SessionType;
   session_name?: string;
+  duration_min?: number;
   monitored_players_count: number;
   opponent?: string;
   game_number?: number;
@@ -72,44 +82,41 @@ export interface RPEEntry {
   player_id: string;
   session_id: string;
   date: string;
-  rpe_score: number; // 1-10
-  rpe_scale: string; // "Borg CR10"
+  rpe_score: number; // 1-10 Borg CR10
+  duration_min?: number;
+  sRPE?: number; // RPE * duration_min
   notes?: string;
   created_at: string;
 }
 
-export interface WellnessEntry {
-  id: string;
-  player_id: string;
-  date: string;
-  sleep_score: number; // 1-10
-  fatigue_score: number; // 1-10
-  soreness_score: number; // 1-10
-  stress_score: number; // 1-10
-  readiness_score: number; // 1-10
-  created_at: string;
+export interface IndividualBaseline {
+  metric: keyof CoreMetrics | 'RPE';
+  longTermAvg: number | null;
+  recentAvg: number | null;
+  sampleSize: number;
 }
 
-export interface SCIntervention {
-  id: string;
-  player_id: string;
-  date: string;
-  exercise: string;
-  isometric_type: string;
-  joint_angle: string;
-  duration_s: number;
-  sets: number;
-  load_kg?: number;
-  target_area: string;
+export type FlagStatus = 'GREEN' | 'YELLOW' | 'RED' | 'INSUFFICIENT_HISTORY';
+
+export interface MetricFlag {
+  metric: keyof CoreMetrics | 'RPE';
+  status: FlagStatus;
+  currentValue: number | null;
+  baselineValue: number | null;
+  pctChange: number | null;
   reason: string;
-  created_at: string;
+}
+
+export interface SessionFlagSummary {
+  overallStatus: FlagStatus;
+  flags: MetricFlag[];
+  triggerReasons: string[];
 }
 
 export interface CoachSettings {
-  green_threshold_pct: number; // e.g. 10%
-  yellow_threshold_pct: number; // e.g. 25%
-  red_threshold_pct: number; // e.g. >25%
-  min_sessions_for_baseline: number; // e.g. 5
+  yellow_threshold_pct: number; // e.g. 15%
+  red_threshold_pct: number; // e.g. 30%
+  min_sessions_for_baseline: number; // e.g. 3
 }
 
 export interface AuditLog {
@@ -118,14 +125,4 @@ export interface AuditLog {
   action: string;
   user: string;
   details: string;
-}
-
-export interface AIChatMessage {
-  id: string;
-  sender: 'user' | 'assistant';
-  text: string;
-  timestamp: string;
-  dataSummary?: Record<string, any>;
-  calculationMethod?: string;
-  type?: 'DATA' | 'CALCULATION' | 'INTERPRETATION' | 'RECOMMENDATION';
 }

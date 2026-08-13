@@ -10,7 +10,6 @@ import { SessionHistoryView } from './components/SessionHistoryView';
 import { PlayerProfileView } from './components/PlayerProfileView';
 import { TeamAnalyticsView } from './components/TeamAnalyticsView';
 import { PlayerComparisonView } from './components/PlayerComparisonView';
-import { AIPerformanceAnalystView } from './components/AIPerformanceAnalystView';
 import { FutureModulesView } from './components/FutureModulesView';
 import { SettingsView } from './components/SettingsView';
 
@@ -138,10 +137,6 @@ export default function App() {
           )}
 
           {activeTab === 'comparison' && <PlayerComparisonView players={roster} />}
-
-          {activeTab === 'ai_analyst' && (
-            <AIPerformanceAnalystView roster={roster} sessions={sessions} records={records} />
-          )}
 
           {activeTab === 'future_modules' && <FutureModulesView roster={roster} />}
 

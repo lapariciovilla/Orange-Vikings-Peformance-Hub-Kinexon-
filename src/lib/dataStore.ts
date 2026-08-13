@@ -3,11 +3,14 @@ import {
   PlayerSessionRecord,
   SessionMeta,
   CoreMetrics,
+  RelativeMetrics,
   RPEEntry,
-  WellnessEntry,
-  SCIntervention,
   CoachSettings,
   AuditLog,
+  IndividualBaseline,
+  MetricFlag,
+  SessionFlagSummary,
+  FlagStatus,
 } from '../types';
 import {
   INITIAL_ROSTER,
@@ -22,8 +25,6 @@ const STORAGE_KEYS = {
   SESSIONS_META: 'ov_sessions_meta_v1',
   PLAYER_RECORDS: 'ov_player_records_v1',
   RPE_ENTRIES: 'ov_rpe_entries_v1',
-  WELLNESS_ENTRIES: 'ov_wellness_entries_v1',
-  SC_INTERVENTIONS: 'ov_sc_interventions_v1',
   SETTINGS: 'ov_settings_v1',
   AUDIT_LOGS: 'ov_audit_logs_v1',
 };
@@ -134,7 +135,29 @@ export class DataStore {
 
   // --- PLAYER RECORDS ---
   static getPlayerRecords(): PlayerSessionRecord[] {
-    return getStored<PlayerSessionRecord[]>(STORAGE_KEYS.PLAYER_RECORDS, INITIAL_PLAYER_RECORDS);
+    const records = getStored<PlayerSessionRecord[]>(STORAGE_KEYS.PLAYER_RECORDS, INITIAL_PLAYER_RECORDS);
+    // Enrich with relative exposure metrics dynamically
+    return records.map((r) => this.enrichRecordWithRelative(r));
+  }
+
+  static enrichRecordWithRelative(r: PlayerSessionRecord): PlayerSessionRecord {
+    const minutes = r.session_type === 'Game' && r.game_minutes && r.game_minutes > 0
+      ? r.game_minutes
+      : (r.duration_min && r.duration_min > 0 ? r.duration_min : null);
+
+    if (!minutes || minutes <= 0) {
+      return { ...r, relative: undefined };
+    }
+
+    const relative: RelativeMetrics = {
+      distance_per_min: r.distance_m !== null ? Number((r.distance_m / minutes).toFixed(1)) : null,
+      accel_load_per_min: r.accumulated_acceleration_load !== null ? Number((r.accumulated_acceleration_load / minutes).toFixed(2)) : null,
+      mechanical_load_per_min: r.mechanical_load !== null ? Number((r.mechanical_load / minutes).toFixed(2)) : null,
+      decel_load_per_min: r.deceleration_load !== null ? Number((r.deceleration_load / minutes).toFixed(2)) : null,
+      jump_load_per_min: r.jump_load !== null ? Number((r.jump_load / minutes).toFixed(2)) : null,
+    };
+
+    return { ...r, relative };
   }
 
   static savePlayerRecords(records: PlayerSessionRecord[]): void {
@@ -253,7 +276,7 @@ export class DataStore {
     this.addAuditLog('UPDATE_SETTINGS', 'Updated Coach Settings thresholds');
   }
 
-  // --- RPE ---
+  // --- RPE DATA MANAGEMENT ---
   static getRPEEntries(): RPEEntry[] {
     return getStored<RPEEntry[]>(STORAGE_KEYS.RPE_ENTRIES, INITIAL_RPE_ENTRIES);
   }
@@ -263,11 +286,22 @@ export class DataStore {
     const newEntry: RPEEntry = {
       ...entry,
       id: `rpe_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      sRPE: entry.rpe_score && entry.duration_min ? entry.rpe_score * entry.duration_min : undefined,
       created_at: new Date().toISOString(),
     };
     entries.push(newEntry);
     setStored(STORAGE_KEYS.RPE_ENTRIES, entries);
-    this.addAuditLog('SAVE_RPE', `Saved RPE ${entry.rpe_score}/10 for date ${entry.date}`);
+
+    // Also enrich PlayerSessionRecord if matching record exists
+    const records = this.getPlayerRecords();
+    const recordIdx = records.findIndex((r) => r.player_id === entry.player_id && r.date === entry.date);
+    if (recordIdx >= 0) {
+      records[recordIdx].RPE = entry.rpe_score;
+      if (entry.duration_min) records[recordIdx].sRPE = entry.rpe_score * entry.duration_min;
+      this.savePlayerRecords(records);
+    }
+
+    this.addAuditLog('SAVE_RPE', `Recorded RPE ${entry.rpe_score}/10 for date ${entry.date}`);
     return newEntry;
   }
 
@@ -290,38 +324,9 @@ export class DataStore {
     return true;
   }
 
-  // --- WELLNESS ---
-  static getWellnessEntries(): WellnessEntry[] {
-    return getStored<WellnessEntry[]>(STORAGE_KEYS.WELLNESS_ENTRIES, []);
-  }
-
-  static saveWellnessEntry(entry: Omit<WellnessEntry, 'id' | 'created_at'>): WellnessEntry {
-    const entries = this.getWellnessEntries();
-    const newEntry: WellnessEntry = {
-      ...entry,
-      id: `well_${Date.now()}`,
-      created_at: new Date().toISOString(),
-    };
-    entries.push(newEntry);
-    setStored(STORAGE_KEYS.WELLNESS_ENTRIES, entries);
-    return newEntry;
-  }
-
-  // --- S&C INTERVENTIONS ---
-  static getSCInterventions(): SCIntervention[] {
-    return getStored<SCIntervention[]>(STORAGE_KEYS.SC_INTERVENTIONS, []);
-  }
-
-  static saveSCIntervention(intervention: Omit<SCIntervention, 'id' | 'created_at'>): SCIntervention {
-    const items = this.getSCInterventions();
-    const newItem: SCIntervention = {
-      ...intervention,
-      id: `sc_${Date.now()}`,
-      created_at: new Date().toISOString(),
-    };
-    items.push(newItem);
-    setStored(STORAGE_KEYS.SC_INTERVENTIONS, items);
-    return newItem;
+  static clearAllRPEData(): void {
+    setStored(STORAGE_KEYS.RPE_ENTRIES, []);
+    this.addAuditLog('RESET_RPE', 'Cleared all RPE records for fresh coach entry');
   }
 
   // --- AUDIT LOGS ---
@@ -338,13 +343,11 @@ export class DataStore {
       user,
       details,
     });
-    // keep last 100 logs
     setStored(STORAGE_KEYS.AUDIT_LOGS, logs.slice(0, 100));
   }
 
-  // --- ANALYTICS CALCULATORS ---
+  // --- ANALYTICS & BASELINES ---
 
-  // Calculate team averages for a given array of records
   static calculateTeamAverages(records: PlayerSessionRecord[]) {
     if (records.length === 0) {
       return {
@@ -353,6 +356,7 @@ export class DataStore {
         avg_decel: null,
         avg_jump: null,
         avg_mechanical: null,
+        avg_rpe: null,
         total_distance: 0,
         player_count: 0,
       };
@@ -363,28 +367,15 @@ export class DataStore {
     let decelSum = 0, decelCount = 0;
     let jumpSum = 0, jumpCount = 0;
     let mechSum = 0, mechCount = 0;
+    let rpeSum = 0, rpeCount = 0;
 
     records.forEach((r) => {
-      if (r.distance_m !== null) {
-        distSum += r.distance_m;
-        distCount++;
-      }
-      if (r.accumulated_acceleration_load !== null) {
-        accelSum += r.accumulated_acceleration_load;
-        accelCount++;
-      }
-      if (r.deceleration_load !== null) {
-        decelSum += r.deceleration_load;
-        decelCount++;
-      }
-      if (r.jump_load !== null) {
-        jumpSum += r.jump_load;
-        jumpCount++;
-      }
-      if (r.mechanical_load !== null) {
-        mechSum += r.mechanical_load;
-        mechCount++;
-      }
+      if (r.distance_m !== null) { distSum += r.distance_m; distCount++; }
+      if (r.accumulated_acceleration_load !== null) { accelSum += r.accumulated_acceleration_load; accelCount++; }
+      if (r.deceleration_load !== null) { decelSum += r.deceleration_load; decelCount++; }
+      if (r.jump_load !== null) { jumpSum += r.jump_load; jumpCount++; }
+      if (r.mechanical_load !== null) { mechSum += r.mechanical_load; mechCount++; }
+      if (r.RPE !== null && r.RPE !== undefined) { rpeSum += r.RPE; rpeCount++; }
     });
 
     return {
@@ -393,64 +384,156 @@ export class DataStore {
       avg_decel: decelCount > 0 ? Number((decelSum / decelCount).toFixed(1)) : null,
       avg_jump: jumpCount > 0 ? Number((jumpSum / jumpCount).toFixed(1)) : null,
       avg_mechanical: mechCount > 0 ? Number((mechSum / mechCount).toFixed(1)) : null,
+      avg_rpe: rpeCount > 0 ? Number((rpeSum / rpeCount).toFixed(1)) : null,
       total_distance: distSum,
       player_count: records.length,
     };
   }
 
-  // Calculate individual baseline for a player across recent records
-  static calculatePlayerBaseline(playerId: string, metric: keyof CoreMetrics, limitSessions = 10) {
+  // Calculate long-term & recent individual baseline for a player
+  static calculatePlayerBaseline(
+    playerId: string,
+    metric: keyof CoreMetrics | 'RPE'
+  ): IndividualBaseline {
     const playerRecords = this.getRecordsForPlayer(playerId);
     const validValues = playerRecords
-      .map((r) => r[metric])
+      .map((r) => metric === 'RPE' ? r.RPE : r[metric])
       .filter((val): val is number => val !== null && val !== undefined);
 
-    if (validValues.length === 0) return null;
+    if (validValues.length === 0) {
+      return { metric, longTermAvg: null, recentAvg: null, sampleSize: 0 };
+    }
 
-    const slice = validValues.slice(0, limitSessions);
-    const sum = slice.reduce((a, b) => a + b, 0);
-    return Number((sum / slice.length).toFixed(1));
+    const sumAll = validValues.reduce((a, b) => a + b, 0);
+    const longTermAvg = Number((sumAll / validValues.length).toFixed(1));
+
+    const recentSlice = validValues.slice(0, 3);
+    const sumRecent = recentSlice.reduce((a, b) => a + b, 0);
+    const recentAvg = Number((sumRecent / recentSlice.length).toFixed(1));
+
+    return {
+      metric,
+      longTermAvg,
+      recentAvg,
+      sampleSize: validValues.length,
+    };
   }
 
-  // Get baseline status: "BASELINE BUILDING" if records < min_sessions_for_baseline, else Green/Yellow/Red
-  static getPlayerLoadStatus(
+  // Evaluate Flag for a specific metric vs baseline
+  static evaluateMetricFlag(
     playerId: string,
     currentValue: number | null,
-    metric: keyof CoreMetrics
-  ): { status: 'BASELINE BUILDING' | 'GREEN' | 'YELLOW' | 'RED'; label: string; pctChange: number | null; baseline: number | null } {
+    metric: keyof CoreMetrics | 'RPE'
+  ): MetricFlag {
     const settings = this.getSettings();
-    const playerRecords = this.getRecordsForPlayer(playerId);
+    const baselineInfo = this.calculatePlayerBaseline(playerId, metric);
 
-    const validMetricRecords = playerRecords.filter((r) => r[metric] !== null);
-
-    if (validMetricRecords.length < settings.min_sessions_for_baseline || currentValue === null) {
+    if (baselineInfo.sampleSize < settings.min_sessions_for_baseline || currentValue === null) {
       return {
-        status: 'BASELINE BUILDING',
-        label: 'BASELINE BUILDING',
+        metric,
+        status: 'INSUFFICIENT_HISTORY',
+        currentValue,
+        baselineValue: baselineInfo.recentAvg,
         pctChange: null,
-        baseline: null,
+        reason: 'Insufficient individual history (< 3 sessions logged)',
       };
     }
 
-    const baseline = this.calculatePlayerBaseline(playerId, metric, 10);
-    if (baseline === null || baseline === 0) {
+    const baseline = baselineInfo.recentAvg!;
+    if (baseline === 0) {
       return {
-        status: 'BASELINE BUILDING',
-        label: 'BASELINE BUILDING',
-        pctChange: null,
-        baseline: null,
+        metric,
+        status: 'GREEN',
+        currentValue,
+        baselineValue: baseline,
+        pctChange: 0,
+        reason: 'Baseline is zero',
       };
     }
 
     const pctChange = Number((((currentValue - baseline) / baseline) * 100).toFixed(1));
 
+    const metricLabels: Record<string, string> = {
+      distance_m: 'Total Distance',
+      accumulated_acceleration_load: 'Accumulated Accel Load',
+      mechanical_load: 'Mechanical Load',
+      deceleration_load: 'Mechanical Deceleration Load',
+      jump_load: 'Jump Load',
+      RPE: 'Subjective RPE',
+    };
+
+    const label = metricLabels[metric] || metric;
+
     if (pctChange > settings.red_threshold_pct) {
-      return { status: 'RED', label: 'HIGH / UNUSUAL', pctChange, baseline };
+      return {
+        metric,
+        status: 'RED',
+        currentValue,
+        baselineValue: baseline,
+        pctChange,
+        reason: `RED: ${label} (+${pctChange}%) is unusually high compared with recent individual baseline (${baseline}).`,
+      };
     } else if (pctChange > settings.yellow_threshold_pct) {
-      return { status: 'YELLOW', label: 'ELEVATED', pctChange, baseline };
+      return {
+        metric,
+        status: 'YELLOW',
+        currentValue,
+        baselineValue: baseline,
+        pctChange,
+        reason: `YELLOW: ${label} (+${pctChange}%) is elevated compared with recent individual baseline (${baseline}).`,
+      };
     } else {
-      return { status: 'GREEN', label: 'NORMAL / EXPECTED', pctChange, baseline };
+      return {
+        metric,
+        status: 'GREEN',
+        currentValue,
+        baselineValue: baseline,
+        pctChange,
+        reason: `GREEN: ${label} is within expected individual range (${baseline}).`,
+      };
     }
+  }
+
+  // Get full session flag summary for a player record
+  static getSessionFlagSummary(record: PlayerSessionRecord): SessionFlagSummary {
+    const metrics: (keyof CoreMetrics)[] = [
+      'distance_m',
+      'accumulated_acceleration_load',
+      'mechanical_load',
+      'deceleration_load',
+      'jump_load',
+    ];
+
+    const flags: MetricFlag[] = metrics.map((m) =>
+      this.evaluateMetricFlag(record.player_id, record[m], m)
+    );
+
+    if (record.RPE !== undefined && record.RPE !== null) {
+      flags.push(this.evaluateMetricFlag(record.player_id, record.RPE, 'RPE'));
+    }
+
+    const redFlags = flags.filter((f) => f.status === 'RED');
+    const yellowFlags = flags.filter((f) => f.status === 'YELLOW');
+    const insufficientFlags = flags.filter((f) => f.status === 'INSUFFICIENT_HISTORY');
+
+    let overallStatus: FlagStatus = 'GREEN';
+    if (redFlags.length > 0) {
+      overallStatus = 'RED';
+    } else if (yellowFlags.length > 0) {
+      overallStatus = 'YELLOW';
+    } else if (insufficientFlags.length === flags.length) {
+      overallStatus = 'INSUFFICIENT_HISTORY';
+    }
+
+    const triggerReasons = flags
+      .filter((f) => f.status === 'RED' || f.status === 'YELLOW')
+      .map((f) => f.reason);
+
+    return {
+      overallStatus,
+      flags,
+      triggerReasons,
+    };
   }
 
   // Reset data back to initial demo data
@@ -459,9 +542,7 @@ export class DataStore {
     setStored(STORAGE_KEYS.SESSIONS_META, INITIAL_SESSIONS_META);
     setStored(STORAGE_KEYS.PLAYER_RECORDS, INITIAL_PLAYER_RECORDS);
     setStored(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS);
-    setStored(STORAGE_KEYS.RPE_ENTRIES, []);
-    setStored(STORAGE_KEYS.WELLNESS_ENTRIES, []);
-    setStored(STORAGE_KEYS.SC_INTERVENTIONS, []);
+    setStored(STORAGE_KEYS.RPE_ENTRIES, INITIAL_RPE_ENTRIES);
     this.addAuditLog('RESET_DATA', 'Reset database to official August 11, 2026 preseason initial state');
   }
 }

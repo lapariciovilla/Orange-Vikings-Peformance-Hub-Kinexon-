@@ -25,7 +25,6 @@ export type ActiveTab =
   | 'players'
   | 'analytics'
   | 'comparison'
-  | 'ai_analyst'
   | 'future_modules'
   | 'settings';
 
@@ -54,7 +53,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'players', label: 'PLAYER PROFILES', icon: User },
     { id: 'analytics', label: 'TEAM ANALYTICS', icon: LineChart },
     { id: 'comparison', label: 'PLAYER COMPARISON', icon: GitCompare },
-    { id: 'ai_analyst', label: 'AI PERFORMANCE ANALYST', icon: Bot },
     { id: 'future_modules', label: 'RPE LOGS & TRENDS', icon: Activity },
     { id: 'settings', label: 'SETTINGS & EXPORT', icon: Sliders },
   ];

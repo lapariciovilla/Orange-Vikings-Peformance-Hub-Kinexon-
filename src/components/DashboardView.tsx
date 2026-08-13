@@ -251,7 +251,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 selectedRankMetric === 'distance_m' ? `${rawVal.toLocaleString()} m` : `${rawVal} au`;
               const barWidthPct = Math.min(100, Math.max(8, (rawVal / maxRankVal) * 100));
 
-              const loadStatus = DataStore.getPlayerLoadStatus(rec.player_id, rawVal, selectedRankMetric);
+              const flag = DataStore.evaluateMetricFlag(rec.player_id, rawVal, selectedRankMetric);
 
               return (
                 <div
@@ -290,17 +290,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                   {/* Status Badge */}
                   <div className="flex items-center justify-end space-x-2 md:w-48 shrink-0">
-                    {loadStatus.status === 'BASELINE BUILDING' ? (
+                    {flag.status === 'INSUFFICIENT_HISTORY' ? (
                       <span className="text-[10px] font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2.5 py-1 rounded-full uppercase tracking-wider">
                         BASELINE BUILDING
                       </span>
-                    ) : loadStatus.status === 'RED' ? (
+                    ) : flag.status === 'RED' ? (
                       <span className="text-[10px] font-extrabold text-rose-400 bg-rose-950/80 border border-rose-800 px-2.5 py-1 rounded-full uppercase">
-                        {loadStatus.label} (+{loadStatus.pctChange}%)
+                        UNUSUAL (+{flag.pctChange}%)
                       </span>
-                    ) : loadStatus.status === 'YELLOW' ? (
+                    ) : flag.status === 'YELLOW' ? (
                       <span className="text-[10px] font-extrabold text-amber-300 bg-amber-950/80 border border-amber-800 px-2.5 py-1 rounded-full uppercase">
-                        {loadStatus.label} (+{loadStatus.pctChange}%)
+                        ELEVATED (+{flag.pctChange}%)
                       </span>
                     ) : (
                       <span className="text-[10px] font-extrabold text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2.5 py-1 rounded-full uppercase">
