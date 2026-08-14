@@ -1,15 +1,11 @@
 import React, { useState } from 'react';
-import { Player, SessionMeta, PlayerSessionRecord } from '../types';
+import { Player, SessionMeta } from '../types';
 import { DataStore } from '../lib/dataStore';
+import { formatWholeNumber } from '../lib/positionalUtils';
 import {
   Calendar as CalendarIcon,
   Award,
   Trophy,
-  Flame,
-  Activity,
-  CheckCircle2,
-  Zap,
-  TrendingUp,
   BarChart2,
 } from 'lucide-react';
 
@@ -33,33 +29,31 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
     sessionByDate[s.date] = s;
   });
 
-  // Calculate Player of the Month
+  // Calculate Monthly Load Leaders for each of the 5 primary metrics
   const playerMonthlyStats = roster.map((player) => {
     const playerRecs = allRecords.filter((r) => r.player_id === player.id);
     const totalDist = playerRecs.reduce((sum, r) => sum + (r.distance_m || 0), 0);
-    const totalMech = playerRecs.reduce((sum, r) => sum + (r.mechanical_load || 0), 0);
+    const totalAccel = playerRecs.reduce((sum, r) => sum + (r.accumulated_acceleration_load || 0), 0);
     const totalDecel = playerRecs.reduce((sum, r) => sum + (r.deceleration_load || 0), 0);
     const totalJump = playerRecs.reduce((sum, r) => sum + (r.jump_load || 0), 0);
+    const totalMech = playerRecs.reduce((sum, r) => sum + (r.mechanical_load || 0), 0);
 
     return {
       player,
       sessionCount: playerRecs.length,
       totalDist,
-      totalMech,
+      totalAccel,
       totalDecel,
       totalJump,
+      totalMech,
     };
   });
 
-  const sortedPerformers = [...playerMonthlyStats].sort((a, b) => b.totalDist - a.totalDist);
-  const playerOfTheMonth = sortedPerformers[0] || {
-    player: roster[0],
-    sessionCount: 4,
-    totalDist: 28411,
-    totalMech: 3657,
-    totalDecel: 502,
-    totalJump: 152,
-  };
+  const distLeader = [...playerMonthlyStats].sort((a, b) => b.totalDist - a.totalDist)[0] || { player: roster[0], totalDist: 0 };
+  const accelLeader = [...playerMonthlyStats].sort((a, b) => b.totalAccel - a.totalAccel)[0] || { player: roster[0], totalAccel: 0 };
+  const decelLeader = [...playerMonthlyStats].sort((a, b) => b.totalDecel - a.totalDecel)[0] || { player: roster[0], totalDecel: 0 };
+  const jumpLeader = [...playerMonthlyStats].sort((a, b) => b.totalJump - a.totalJump)[0] || { player: roster[0], totalJump: 0 };
+  const mechLeader = [...playerMonthlyStats].sort((a, b) => b.totalMech - a.totalMech)[0] || { player: roster[0], totalMech: 0 };
 
   const daySelectedSession = sessionByDate[selectedDate];
   const dayRecords = daySelectedSession
@@ -68,8 +62,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
 
   const dayTotalPlayers = dayRecords.length;
   const inspectorAvgDist = dayTotalPlayers > 0 ? Math.round(dayRecords.reduce((sum, r) => sum + (r.distance_m || 0), 0) / dayTotalPlayers) : 0;
-  const inspectorAvgAccel = dayTotalPlayers > 0 ? (dayRecords.reduce((sum, r) => sum + (r.accumulated_acceleration_load || 0), 0) / dayTotalPlayers).toFixed(1) : '0';
-  const inspectorAvgAccLoad = dayTotalPlayers > 0 ? (dayRecords.reduce((sum, r) => sum + (r.mechanical_load || 0), 0) / dayTotalPlayers).toFixed(1) : '0';
+  const inspectorAvgAccel = dayTotalPlayers > 0 ? Math.round(dayRecords.reduce((sum, r) => sum + (r.accumulated_acceleration_load || 0), 0) / dayTotalPlayers) : 0;
+  const inspectorAvgAccLoad = dayTotalPlayers > 0 ? Math.round(dayRecords.reduce((sum, r) => sum + (r.mechanical_load || 0), 0) / dayTotalPlayers) : 0;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 text-zinc-100">
@@ -94,67 +88,73 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
         </div>
       </div>
 
-      {/* Highlighted Player Performance Section */}
-      <div className="bg-gradient-to-r from-orange-950/60 via-zinc-900 to-zinc-900 border-2 border-orange-500/80 rounded-xl p-6 shadow-2xl space-y-4 relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-          <Trophy className="w-48 h-48 text-orange-500" />
+      {/* Simplified Monthly Load Leaders */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl space-y-4">
+        <div className="flex items-center space-x-2 border-b border-zinc-800 pb-3">
+          <Trophy className="w-5 h-5 text-orange-500" />
+          <h2 className="text-base font-black text-white tracking-wider uppercase">
+            MONTHLY LOAD LEADERS
+          </h2>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-orange-500/30 pb-4">
-          <div className="flex items-center space-x-3">
-            <div className="bg-orange-500 text-zinc-950 font-black px-3 py-1 rounded-md text-xs tracking-wider uppercase flex items-center space-x-1 shadow-lg">
-              <Award className="w-4 h-4" />
-              <span>MONTHLY LOAD LEADERS</span>
-            </div>
-            <span className="text-xs text-orange-400 font-extrabold">AUGUST 2026 TOP EXTERNAL WORKLOAD ATHELTES</span>
-          </div>
-          <div className="text-xs text-zinc-400 font-bold">
-            Based on KINEXON External Workload & Consistency
-          </div>
-        </div>
-
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="flex items-center space-x-4">
-            <div className="w-16 h-16 rounded-2xl bg-zinc-950 border-2 border-orange-500 flex items-center justify-center text-orange-400 font-black text-2xl shadow-xl">
-              {playerOfTheMonth.player.number}
-            </div>
-            <div>
-              <div className="text-xl font-black text-white">{playerOfTheMonth.player.displayName}</div>
-              <div className="text-xs text-orange-400 font-bold flex items-center space-x-2">
-                <span>Position: {playerOfTheMonth.player.position}</span>
-                <span>•</span>
-                <span className="text-emerald-400">STATUS: {playerOfTheMonth.player.status}</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+          <div className="bg-zinc-950 p-3.5 rounded-lg border border-zinc-800 flex items-center justify-between">
+            <div className="space-y-0.5">
+              <div className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">Distance Leader</div>
+              <div className="font-bold text-white">
+                {distLeader.player.displayName} ({distLeader.player.number})
               </div>
-              <p className="text-xs text-zinc-300 mt-1 max-w-xl">
-                Demonstrated superior high-speed distance accumulation and exceptional deceleration load tolerance throughout August pre-season and B.LEAGUE games.
-              </p>
+            </div>
+            <div className="text-right">
+              <span className="font-black text-amber-400 text-base">{formatWholeNumber(distLeader.totalDist)} m</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs w-full md:w-auto">
-            <div className="bg-zinc-950/80 border border-zinc-800 p-3 rounded-lg text-center">
-              <span className="text-zinc-500 text-[10px] block font-bold">MONTHLY DISTANCE</span>
-              <span className="text-amber-400 font-black text-base">
-                {playerOfTheMonth.totalDist.toLocaleString()} m
-              </span>
+          <div className="bg-zinc-950 p-3.5 rounded-lg border border-zinc-800 flex items-center justify-between">
+            <div className="space-y-0.5">
+              <div className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">Accumulated Acceleration Load Leader</div>
+              <div className="font-bold text-white">
+                {accelLeader.player.displayName} ({accelLeader.player.number})
+              </div>
             </div>
-            <div className="bg-zinc-950/80 border border-zinc-800 p-3 rounded-lg text-center">
-              <span className="text-zinc-500 text-[10px] block font-bold">ACCUMULATED LOAD</span>
-              <span className="text-sky-400 font-black text-base">
-                {playerOfTheMonth.totalMech.toFixed(0)}
-              </span>
+            <div className="text-right">
+              <span className="font-black text-orange-400 text-base">{formatWholeNumber(accelLeader.totalAccel)}</span>
             </div>
-            <div className="bg-zinc-950/80 border border-zinc-800 p-3 rounded-lg text-center">
-              <span className="text-zinc-500 text-[10px] block font-bold">DECEL LOAD</span>
-              <span className="text-rose-400 font-black text-base">
-                {playerOfTheMonth.totalDecel.toFixed(0)}
-              </span>
+          </div>
+
+          <div className="bg-zinc-950 p-3.5 rounded-lg border border-zinc-800 flex items-center justify-between">
+            <div className="space-y-0.5">
+              <div className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">Deceleration Load Leader</div>
+              <div className="font-bold text-white">
+                {decelLeader.player.displayName} ({decelLeader.player.number})
+              </div>
             </div>
-            <div className="bg-zinc-950/80 border border-zinc-800 p-3 rounded-lg text-center">
-              <span className="text-zinc-500 text-[10px] block font-bold">JUMP LOAD</span>
-              <span className="text-purple-400 font-black text-base">
-                {playerOfTheMonth.totalJump}
-              </span>
+            <div className="text-right">
+              <span className="font-black text-rose-400 text-base">{formatWholeNumber(decelLeader.totalDecel)}</span>
+            </div>
+          </div>
+
+          <div className="bg-zinc-950 p-3.5 rounded-lg border border-zinc-800 flex items-center justify-between">
+            <div className="space-y-0.5">
+              <div className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">Jump Load Leader</div>
+              <div className="font-bold text-white">
+                {jumpLeader.player.displayName} ({jumpLeader.player.number})
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="font-black text-purple-400 text-base">{formatWholeNumber(jumpLeader.totalJump)}</span>
+            </div>
+          </div>
+
+          <div className="bg-zinc-950 p-3.5 rounded-lg border border-zinc-800 flex items-center justify-between">
+            <div className="space-y-0.5">
+              <div className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">Mechanical Load Leader</div>
+              <div className="font-bold text-white">
+                {mechLeader.player.displayName} ({mechLeader.player.number})
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="font-black text-sky-400 text-base">{formatWholeNumber(mechLeader.totalMech)}</span>
             </div>
           </div>
         </div>
@@ -245,15 +245,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
                     <div className="space-y-0.5 bg-zinc-950/80 p-1 rounded border border-zinc-800/80 text-[9px] font-bold">
                       <div className="flex justify-between text-amber-400">
                         <span className="text-zinc-500">Dist:</span>
-                        <span>{avgDist > 1000 ? `${(avgDist / 1000).toFixed(1)}k m` : `${avgDist}m`}</span>
+                        <span>{formatWholeNumber(avgDist)} m</span>
                       </div>
                       <div className="flex justify-between text-orange-400">
                         <span className="text-zinc-500">Accel:</span>
-                        <span>{avgAccel}</span>
+                        <span>{formatWholeNumber(avgAccel)}</span>
                       </div>
                       <div className="flex justify-between text-sky-400">
-                        <span className="text-zinc-500">Acc Load:</span>
-                        <span>{avgAccLoad}</span>
+                        <span className="text-zinc-500">Mech:</span>
+                        <span>{formatWholeNumber(avgAccLoad)}</span>
                       </div>
                     </div>
                   ) : (
@@ -293,15 +293,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
                 <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
                   <div>
                     <span className="text-zinc-500 block text-[9px] font-bold">AVG DISTANCE</span>
-                    <span className="font-extrabold text-amber-400">{inspectorAvgDist.toLocaleString()} m</span>
+                    <span className="font-extrabold text-amber-400">{formatWholeNumber(inspectorAvgDist)} m</span>
                   </div>
                   <div>
                     <span className="text-zinc-500 block text-[9px] font-bold">ACCEL LOAD</span>
-                    <span className="font-extrabold text-orange-400">{inspectorAvgAccel}</span>
+                    <span className="font-extrabold text-orange-400">{formatWholeNumber(inspectorAvgAccel)}</span>
                   </div>
                   <div>
-                    <span className="text-zinc-500 block text-[9px] font-bold">ACCUM LOAD</span>
-                    <span className="font-extrabold text-sky-400">{inspectorAvgAccLoad}</span>
+                    <span className="text-zinc-500 block text-[9px] font-bold">MECH LOAD</span>
+                    <span className="font-extrabold text-sky-400">{formatWholeNumber(inspectorAvgAccLoad)}</span>
                   </div>
                 </div>
               </div>
@@ -318,8 +318,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
                       <span className="font-bold text-white">{r.player_name}</span>
                     </div>
                     <div className="text-right">
-                      <span className="font-black text-amber-400 block">{r.distance_m?.toLocaleString()} m</span>
-                      <span className="text-[9px] text-zinc-500 block">Acc Load: {r.mechanical_load || 0}</span>
+                      <span className="font-black text-amber-400 block">{formatWholeNumber(r.distance_m)} m</span>
+                      <span className="text-[9px] text-zinc-500 block">Mech: {formatWholeNumber(r.mechanical_load)}</span>
                     </div>
                   </div>
                 ))}

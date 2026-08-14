@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SessionMeta, PlayerSessionRecord, Player } from '../types';
 import { DataStore } from '../lib/dataStore';
+import { formatWholeNumber } from '../lib/positionalUtils';
 import {
   Calendar as CalendarIcon,
   Users,
@@ -159,7 +160,7 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
                   <div>
                     <span className="text-zinc-500 block text-[10px]">TEAM AVG DISTANCE</span>
                     <span className="text-amber-400 font-extrabold mt-0.5">
-                      {stats.avg_distance !== null ? `${stats.avg_distance.toLocaleString()} m` : 'N/A'}
+                      {stats.avg_distance !== null ? `${formatWholeNumber(stats.avg_distance)} m` : 'N/A'}
                     </span>
                   </div>
                 </div>
@@ -210,31 +211,31 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
               <div>
                 <span className="text-zinc-500 text-[10px] block uppercase font-bold">AVG DISTANCE</span>
                 <span className="text-base font-black text-amber-400">
-                  {averages.avg_distance !== null ? `${averages.avg_distance.toLocaleString()} m` : 'N/A'}
+                  {averages.avg_distance !== null ? `${formatWholeNumber(averages.avg_distance)} m` : 'N/A'}
                 </span>
               </div>
               <div>
                 <span className="text-zinc-500 text-[10px] block uppercase font-bold">ACCEL LOAD</span>
                 <span className="text-base font-black text-orange-400">
-                  {averages.avg_accel !== null ? averages.avg_accel : 'N/A'}
+                  {averages.avg_accel !== null ? formatWholeNumber(averages.avg_accel) : 'N/A'}
                 </span>
               </div>
               <div>
                 <span className="text-zinc-500 text-[10px] block uppercase font-bold">DECEL LOAD</span>
                 <span className="text-base font-black text-rose-400">
-                  {averages.avg_decel !== null ? averages.avg_decel : 'N/A'}
+                  {averages.avg_decel !== null ? formatWholeNumber(averages.avg_decel) : 'N/A'}
                 </span>
               </div>
               <div>
                 <span className="text-zinc-500 text-[10px] block uppercase font-bold">JUMP LOAD</span>
                 <span className="text-base font-black text-purple-400">
-                  {averages.avg_jump !== null ? averages.avg_jump : 'N/A'}
+                  {averages.avg_jump !== null ? formatWholeNumber(averages.avg_jump) : 'N/A'}
                 </span>
               </div>
               <div>
                 <span className="text-zinc-500 text-[10px] block uppercase font-bold">MECH LOAD</span>
                 <span className="text-base font-black text-sky-400">
-                  {averages.avg_mechanical !== null ? averages.avg_mechanical : 'N/A'}
+                  {averages.avg_mechanical !== null ? formatWholeNumber(averages.avg_mechanical) : 'N/A'}
                 </span>
               </div>
             </div>
@@ -355,12 +356,20 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
                           ) : (
                             <>
                               <td className="p-3 font-extrabold text-amber-400">
-                                {rec.distance_m !== null ? `${rec.distance_m.toLocaleString()} m` : 'N/A'}
+                                {rec.distance_m !== null ? `${formatWholeNumber(rec.distance_m)} m` : 'N/A'}
                               </td>
-                              <td className="p-3">{rec.accumulated_acceleration_load ?? 'N/A'}</td>
-                              <td className="p-3">{rec.deceleration_load ?? 'N/A'}</td>
-                              <td className="p-3">{rec.jump_load ?? 'N/A'}</td>
-                              <td className="p-3">{rec.mechanical_load ?? 'N/A'}</td>
+                              <td className="p-3 font-bold text-orange-400">
+                                {rec.accumulated_acceleration_load !== null ? formatWholeNumber(rec.accumulated_acceleration_load) : 'N/A'}
+                              </td>
+                              <td className="p-3 font-bold text-rose-400">
+                                {rec.deceleration_load !== null ? formatWholeNumber(rec.deceleration_load) : 'N/A'}
+                              </td>
+                              <td className="p-3 font-bold text-purple-400">
+                                {rec.jump_load !== null ? formatWholeNumber(rec.jump_load) : 'N/A'}
+                              </td>
+                              <td className="p-3 font-bold text-sky-400">
+                                {rec.mechanical_load !== null ? formatWholeNumber(rec.mechanical_load) : 'N/A'}
+                              </td>
                               <td className="p-3">
                                 <button
                                   onClick={() => handleStartEdit(rec)}

@@ -134,10 +134,49 @@ export class DataStore {
   }
 
   // --- PLAYER RECORDS ---
+  static getMatchingRPE(playerId: string, playerNumber?: string, date?: string, sessionId?: string): RPEEntry | undefined {
+    const entries = this.getRPEEntries();
+    const cleanNum = playerNumber ? playerNumber.replace(/[^0-9]/g, '') : null;
+
+    return entries.find((e) => {
+      // 1. Player match
+      const pMatch =
+        e.player_id === playerId ||
+        (cleanNum && e.player_number && e.player_number.replace(/[^0-9]/g, '') === cleanNum);
+
+      if (!pMatch) return false;
+
+      // 2. Date match
+      if (date && e.date !== date) return false;
+
+      // 3. Session ID match if present in both
+      if (sessionId && e.session_id && e.session_id !== sessionId) {
+        return false;
+      }
+
+      return true;
+    });
+  }
+
   static getPlayerRecords(): PlayerSessionRecord[] {
     const records = getStored<PlayerSessionRecord[]>(STORAGE_KEYS.PLAYER_RECORDS, INITIAL_PLAYER_RECORDS);
-    // Enrich with relative exposure metrics dynamically
-    return records.map((r) => this.enrichRecordWithRelative(r));
+
+    return records.map((r) => {
+      const matchingRPE = this.getMatchingRPE(r.player_id, r.player_number, r.date, r.session_id);
+
+      const rpeVal = matchingRPE ? matchingRPE.rpe_score : (r.RPE ?? null);
+      const srpeVal = matchingRPE && matchingRPE.duration_min
+        ? matchingRPE.rpe_score * matchingRPE.duration_min
+        : (r.sRPE ?? (rpeVal !== null && r.duration_min ? rpeVal * r.duration_min : null));
+
+      const enrichedRecord: PlayerSessionRecord = {
+        ...r,
+        RPE: rpeVal,
+        sRPE: srpeVal,
+      };
+
+      return this.enrichRecordWithRelative(enrichedRecord);
+    });
   }
 
   static enrichRecordWithRelative(r: PlayerSessionRecord): PlayerSessionRecord {
@@ -278,31 +317,72 @@ export class DataStore {
 
   // --- RPE DATA MANAGEMENT ---
   static getRPEEntries(): RPEEntry[] {
-    return getStored<RPEEntry[]>(STORAGE_KEYS.RPE_ENTRIES, INITIAL_RPE_ENTRIES);
+    const entries = getStored<RPEEntry[]>(STORAGE_KEYS.RPE_ENTRIES, INITIAL_RPE_ENTRIES);
+    // Ensure default initial August 11 and August 12 entries are preserved
+    const existingKeys = new Set(entries.map((e) => `${e.player_id}_${e.date}`));
+    let updated = false;
+    const merged = [...entries];
+
+    INITIAL_RPE_ENTRIES.forEach((init) => {
+      const key = `${init.player_id}_${init.date}`;
+      if (!existingKeys.has(key)) {
+        merged.push(init);
+        updated = true;
+      }
+    });
+
+    if (updated) {
+      setStored(STORAGE_KEYS.RPE_ENTRIES, merged);
+    }
+
+    return merged;
   }
 
   static saveRPEEntry(entry: Omit<RPEEntry, 'id' | 'created_at'>): RPEEntry {
     const entries = this.getRPEEntries();
-    const newEntry: RPEEntry = {
-      ...entry,
-      id: `rpe_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-      sRPE: entry.rpe_score && entry.duration_min ? entry.rpe_score * entry.duration_min : undefined,
-      created_at: new Date().toISOString(),
-    };
-    entries.push(newEntry);
+
+    // Check if entry already exists for player_id + date (+ session_id if provided)
+    const existingIdx = entries.findIndex((e) => {
+      const pMatch = e.player_id === entry.player_id;
+      const dMatch = e.date === entry.date;
+      if (entry.session_id && e.session_id) {
+        return pMatch && dMatch && e.session_id === entry.session_id;
+      }
+      return pMatch && dMatch;
+    });
+
+    let savedEntry: RPEEntry;
+    if (existingIdx >= 0) {
+      savedEntry = {
+        ...entries[existingIdx],
+        ...entry,
+        sRPE: entry.rpe_score && entry.duration_min ? entry.rpe_score * entry.duration_min : entries[existingIdx].sRPE,
+        updated_at: new Date().toISOString(),
+      };
+      entries[existingIdx] = savedEntry;
+    } else {
+      savedEntry = {
+        ...entry,
+        id: `rpe_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        sRPE: entry.rpe_score && entry.duration_min ? entry.rpe_score * entry.duration_min : undefined,
+        created_at: new Date().toISOString(),
+      };
+      entries.push(savedEntry);
+    }
+
     setStored(STORAGE_KEYS.RPE_ENTRIES, entries);
 
-    // Also enrich PlayerSessionRecord if matching record exists
-    const records = this.getPlayerRecords();
-    const recordIdx = records.findIndex((r) => r.player_id === entry.player_id && r.date === entry.date);
-    if (recordIdx >= 0) {
-      records[recordIdx].RPE = entry.rpe_score;
-      if (entry.duration_min) records[recordIdx].sRPE = entry.rpe_score * entry.duration_min;
+    // Also update matching record directly in PLAYER_RECORDS
+    const records = getStored<PlayerSessionRecord[]>(STORAGE_KEYS.PLAYER_RECORDS, INITIAL_PLAYER_RECORDS);
+    const recIdx = records.findIndex((r) => r.player_id === entry.player_id && r.date === entry.date);
+    if (recIdx >= 0) {
+      records[recIdx].RPE = entry.rpe_score;
+      if (entry.duration_min) records[recIdx].sRPE = entry.rpe_score * entry.duration_min;
       this.savePlayerRecords(records);
     }
 
     this.addAuditLog('SAVE_RPE', `Recorded RPE ${entry.rpe_score}/10 for date ${entry.date}`);
-    return newEntry;
+    return savedEntry;
   }
 
   static updateRPEEntry(id: string, updates: Partial<RPEEntry>): RPEEntry | null {

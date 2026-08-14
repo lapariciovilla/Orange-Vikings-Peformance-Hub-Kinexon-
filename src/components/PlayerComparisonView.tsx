@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Player, PlayerSessionRecord } from '../types';
+import React, { useState, useMemo } from 'react';
+import { Player, CoreMetrics } from '../types';
 import { DataStore } from '../lib/dataStore';
+import { formatWholeNumber } from '../lib/positionalUtils';
 import {
   ResponsiveContainer,
   BarChart,
@@ -9,18 +10,42 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
-  Legend,
 } from 'recharts';
-import { GitCompare, Info, Check, Plus, X } from 'lucide-react';
+import { GitCompare, Info, Check, Plus, X, Calendar } from 'lucide-react';
 
 interface PlayerComparisonViewProps {
   players: Player[];
 }
 
+type CompareMetricKey = keyof CoreMetrics | 'RPE';
+
+const METRIC_CONFIG: Record<CompareMetricKey, { label: string; unit: string; color: string }> = {
+  distance_m: { label: 'Total Distance', unit: 'm', color: '#f59e0b' },
+  accumulated_acceleration_load: { label: 'Accumulated Accel Load', unit: 'au', color: '#ea580c' },
+  deceleration_load: { label: 'Deceleration Load', unit: 'au', color: '#f43f5e' },
+  jump_load: { label: 'Jump Load', unit: 'au', color: '#a855f7' },
+  mechanical_load: { label: 'Mechanical Load', unit: 'au', color: '#38bdf8' },
+  RPE: { label: 'Subjective RPE', unit: '1-10', color: '#c084fc' },
+};
+
 export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ players }) => {
+  const sessionsMeta = DataStore.getSessionsMeta();
+  const allRecords = DataStore.getPlayerRecords();
+
+  const [selectedSessionId, setSelectedSessionId] = useState<string>(
+    sessionsMeta[0]?.id || 'session-2026-08-12'
+  );
+
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>(
     players.length >= 2 ? [players[0].id, players[1].id] : [players[0]?.id || '']
   );
+
+  const [normMode, setNormMode] = useState<'TOTAL' | 'NORMALIZED'>('TOTAL');
+  const [activeMetric, setActiveMetric] = useState<CompareMetricKey>('distance_m');
+
+  const selectedSession = useMemo(() => {
+    return sessionsMeta.find((s) => s.id === selectedSessionId) || sessionsMeta[0];
+  }, [sessionsMeta, selectedSessionId]);
 
   const togglePlayerSelect = (id: string) => {
     if (selectedPlayerIds.includes(id)) {
@@ -34,69 +59,45 @@ export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ play
     }
   };
 
-  // Compile stats for each selected player
-  const compareData = selectedPlayerIds.map((pId) => {
-    const p = players.find((pl) => pl.id === pId)!;
-    const pRecords = DataStore.getRecordsForPlayer(pId);
-    const latestRec = pRecords.length > 0 ? pRecords[0] : null;
+  const sessionRecords = useMemo(() => {
+    return allRecords.filter((r) => r.session_id === selectedSessionId);
+  }, [allRecords, selectedSessionId]);
 
-    const calculateAvg = (key: keyof PlayerSessionRecord) => {
-      const vals = pRecords
-        .map((r) => r[key])
-        .filter((v): v is number => typeof v === 'number');
-      if (vals.length === 0) return null;
-      return Number((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1));
-    };
+  const isGame = selectedSession?.session_type === 'Game';
 
-    return {
-      player: p,
-      latest: latestRec,
-      avgDistance: calculateAvg('distance_m'),
-      avgAccel: calculateAvg('accumulated_acceleration_load'),
-      avgDecel: calculateAvg('deceleration_load'),
-      avgJump: calculateAvg('jump_load'),
-      avgMech: calculateAvg('mechanical_load'),
-    };
-  });
+  const compareData = useMemo(() => {
+    return selectedPlayerIds.map((pId) => {
+      const p = players.find((pl) => pl.id === pId)!;
+      const rec = sessionRecords.find((r) => r.player_id === pId);
 
-  // Recharts multi-bar dataset
-  const chartDataset = [
-    {
-      metric: 'Distance (m / 10)',
-      ...Object.fromEntries(
-        compareData.map((d) => [
-          d.player.displayName,
-          d.latest?.distance_m ? Math.round(d.latest.distance_m / 10) : 0,
-        ])
-      ),
-    },
-    {
-      metric: 'Accel Load',
-      ...Object.fromEntries(
-        compareData.map((d) => [d.player.displayName, d.latest?.accumulated_acceleration_load || 0])
-      ),
-    },
-    {
-      metric: 'Decel Load',
-      ...Object.fromEntries(
-        compareData.map((d) => [d.player.displayName, d.latest?.deceleration_load || 0])
-      ),
-    },
-    {
-      metric: 'Jump Load',
-      ...Object.fromEntries(
-        compareData.map((d) => [d.player.displayName, d.latest?.jump_load || 0])
-      ),
-    },
-    {
-      metric: 'Mech Load',
-      ...Object.fromEntries(
-        compareData.map((d) => [d.player.displayName, d.latest?.mechanical_load || 0])
-      ),
-    },
-  ];
+      const minutes = isGame && rec?.game_minutes && rec.game_minutes > 0
+        ? rec.game_minutes
+        : (rec?.duration_min && rec.duration_min > 0 ? rec.duration_min : null);
 
-  const BAR_COLORS = ['#f97316', '#38bdf8', '#a855f7', '#34d399'];
+      const getVal = (mKey: CompareMetricKey) => {
+        if (!rec) return null;
+        if (mKey === 'RPE') return rec.RPE ?? null;
+        const raw = rec[mKey];
+        if (raw === null || raw === undefined) return null;
+        if (normMode === 'NORMALIZED' && minutes && minutes > 0) {
+          return raw / minutes;
+        }
+        return raw;
+      };
+
+      return {
+        player: p,
+        record: rec || null,
+        minutes,
+        distance: getVal('distance_m'),
+        accel: getVal('accumulated_acceleration_load'),
+        decel: getVal('deceleration_load'),
+        jump: getVal('jump_load'),
+        mech: getVal('mechanical_load'),
+        rpe: rec?.RPE ?? null,
+      };
+    });
+  }, [selectedPlayerIds, players, sessionRecords, isGame, normMode]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 text-zinc-100">
@@ -111,8 +112,64 @@ export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ play
             <span>PLAYER COMPARISON</span>
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
-            Compare 2 to 4 Orange Vikings athletes across KINEXON external-load metrics.
+            Compare 2 to 4 Orange Vikings athletes across KINEXON external-load metrics and RPE.
           </p>
+        </div>
+
+        {/* Date / Session Selector */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 bg-zinc-950 p-3 rounded-lg border border-zinc-800">
+          <Calendar className="w-4 h-4 text-orange-500 shrink-0" />
+          <span className="text-xs font-black text-zinc-300 uppercase whitespace-nowrap">Selected Session:</span>
+          <select
+            value={selectedSessionId}
+            onChange={(e) => setSelectedSessionId(e.target.value)}
+            className="bg-zinc-900 border border-zinc-700 text-white font-black text-xs rounded px-3 py-1.5 focus:outline-none focus:border-orange-500"
+          >
+            {sessionsMeta.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.date} — {s.session_name || s.session_type}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Prominent Session Display Banner */}
+      <div className="bg-gradient-to-r from-orange-950/40 via-zinc-900 to-zinc-900 border-2 border-orange-500/60 rounded-xl p-4 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center space-x-3">
+          <div className="bg-orange-500 text-zinc-950 px-3 py-1 rounded font-black text-xs uppercase tracking-wider">
+            {selectedSession?.session_type || 'PRACTICE'}
+          </div>
+          <div>
+            <div className="text-sm font-black text-white">
+              Selected Session Date: <span className="text-orange-400">{selectedSession?.date}</span>
+            </div>
+            <div className="text-xs text-zinc-400 font-bold">
+              {selectedSession?.session_name || 'Orange Vikings Team Session'} • {isGame ? 'Game Minutes Denominator' : 'Total Practice Session Duration Denominator'}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2 text-xs font-bold">
+          <span className="text-zinc-400">Mode:</span>
+          <div className="bg-zinc-950 p-1 rounded-lg border border-zinc-800 flex space-x-1">
+            <button
+              onClick={() => setNormMode('TOTAL')}
+              className={`px-2.5 py-1 rounded text-xs transition-all ${
+                normMode === 'TOTAL' ? 'bg-orange-500 text-zinc-950 font-black' : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              Total Load
+            </button>
+            <button
+              onClick={() => setNormMode('NORMALIZED')}
+              className={`px-2.5 py-1 rounded text-xs transition-all ${
+                normMode === 'NORMALIZED' ? 'bg-orange-500 text-zinc-950 font-black' : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              Density ({isGame ? 'Per Played Min' : 'Per Session Min'})
+            </button>
+          </div>
         </div>
       </div>
 
@@ -146,7 +203,7 @@ export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ play
 
       {/* Side-by-Side Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {compareData.map((item, idx) => (
+        {compareData.map((item) => (
           <div
             key={item.player.id}
             className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4 shadow-xl"
@@ -172,35 +229,47 @@ export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ play
               )}
             </div>
 
+            <div className="text-[10px] font-bold text-zinc-500 border-b border-zinc-800 pb-1">
+              {isGame
+                ? (item.record?.game_minutes ? `Played: ${item.record.game_minutes} min` : 'Game min N/A')
+                : (item.record?.duration_min ? `Duration: ${item.record.duration_min} min` : 'Duration N/A')}
+            </div>
+
             <div className="space-y-2 text-xs">
               <div className="flex justify-between border-b border-zinc-800/60 pb-1">
-                <span className="text-zinc-400">Distance:</span>
+                <span className="text-zinc-400">Total Distance:</span>
                 <span className="font-extrabold text-amber-400">
-                  {item.latest?.distance_m ? `${item.latest.distance_m.toLocaleString()} m` : 'N/A'}
+                  {item.distance !== null ? `${formatWholeNumber(item.distance)} ${normMode === 'NORMALIZED' ? (isGame ? 'm/min' : 'm/min') : 'm'}` : 'No data'}
                 </span>
               </div>
               <div className="flex justify-between border-b border-zinc-800/60 pb-1">
                 <span className="text-zinc-400">Accel Load:</span>
                 <span className="font-extrabold text-orange-400">
-                  {item.latest?.accumulated_acceleration_load ?? 'N/A'}
+                  {item.accel !== null ? formatWholeNumber(item.accel) : 'No data'}
                 </span>
               </div>
               <div className="flex justify-between border-b border-zinc-800/60 pb-1">
                 <span className="text-zinc-400">Decel Load:</span>
                 <span className="font-extrabold text-rose-400">
-                  {item.latest?.deceleration_load ?? 'N/A'}
+                  {item.decel !== null ? formatWholeNumber(item.decel) : 'No data'}
                 </span>
               </div>
               <div className="flex justify-between border-b border-zinc-800/60 pb-1">
                 <span className="text-zinc-400">Jump Load:</span>
                 <span className="font-extrabold text-purple-400">
-                  {item.latest?.jump_load ?? 'N/A'}
+                  {item.jump !== null ? formatWholeNumber(item.jump) : 'No data'}
+                </span>
+              </div>
+              <div className="flex justify-between border-b border-zinc-800/60 pb-1">
+                <span className="text-zinc-400">Mech Load:</span>
+                <span className="font-extrabold text-sky-400">
+                  {item.mech !== null ? formatWholeNumber(item.mech) : 'No data'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-zinc-400">Mech Load:</span>
-                <span className="font-extrabold text-sky-400">
-                  {item.latest?.mechanical_load ?? 'N/A'}
+                <span className="text-zinc-400">Subjective RPE:</span>
+                <span className="font-extrabold text-purple-300">
+                  {item.rpe !== null && item.rpe !== undefined ? `${formatWholeNumber(item.rpe)} / 10` : 'Not logged'}
                 </span>
               </div>
             </div>
@@ -208,156 +277,68 @@ export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ play
         ))}
       </div>
 
-      {/* Visual Bar Comparison - 1 Metric per Graphic */}
+      {/* Visual Bar Comparison Charts */}
       <div className="space-y-6">
-        <h2 className="text-lg font-black text-white tracking-tight flex items-center space-x-2">
-          <span>INDIVIDUAL METRIC COMPARISON GRAPHICS</span>
-        </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-2">
+          <h2 className="text-lg font-black text-white tracking-tight flex items-center space-x-2">
+            <span>METRIC COMPARISON GRAPHICS</span>
+            <span className="text-xs font-extrabold text-orange-400">
+              (Session Date: {selectedSession?.date})
+            </span>
+          </h2>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Graphic 1: Distance */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-xl space-y-3">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <h3 className="text-sm font-black text-amber-400 uppercase tracking-wider">
-                1. Total Distance (Meters)
-              </h3>
-              <span className="text-[10px] text-zinc-500 font-bold">KINEXON External Volume</span>
-            </div>
-            <div className="h-56 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={compareData.map((d) => ({
-                    name: `#${d.player.number} ${d.player.displayName}`,
-                    'Distance (m)': d.latest?.distance_m || 0,
-                  }))}
-                  margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis dataKey="name" stroke="#a1a1aa" fontSize={11} tick={{ fill: '#d4d4d8' }} />
-                  <YAxis stroke="#a1a1aa" fontSize={11} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }}
-                  />
-                  <Bar dataKey="Distance (m)" fill="#f59e0b" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+          <div className="flex flex-wrap gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-800 text-xs font-bold">
+            {(Object.keys(METRIC_CONFIG) as CompareMetricKey[]).map((mKey) => (
+              <button
+                key={mKey}
+                onClick={() => setActiveMetric(mKey)}
+                className={`px-3 py-1 rounded transition-colors ${
+                  activeMetric === mKey ? 'bg-orange-500 text-zinc-950 font-black' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                {METRIC_CONFIG[mKey].label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl space-y-3">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+            <h3 className="text-sm font-black text-white uppercase tracking-wider" style={{ color: METRIC_CONFIG[activeMetric].color }}>
+              {METRIC_CONFIG[activeMetric].label} {normMode === 'NORMALIZED' ? `Density (${isGame ? 'Per Played Min' : 'Per Session Min'})` : 'Total'}
+            </h3>
+            <span className="text-xs text-zinc-400 font-bold">Date: {selectedSession?.date}</span>
           </div>
 
-          {/* Graphic 2: Acceleration Load */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-xl space-y-3">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <h3 className="text-sm font-black text-orange-400 uppercase tracking-wider">
-                2. Accumulated Acceleration Load
-              </h3>
-              <span className="text-[10px] text-zinc-500 font-bold">Explosive Burst Demand</span>
-            </div>
-            <div className="h-56 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={compareData.map((d) => ({
-                    name: `#${d.player.number} ${d.player.displayName}`,
-                    'Accel Load': d.latest?.accumulated_acceleration_load || 0,
-                  }))}
-                  margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis dataKey="name" stroke="#a1a1aa" fontSize={11} tick={{ fill: '#d4d4d8' }} />
-                  <YAxis stroke="#a1a1aa" fontSize={11} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }}
-                  />
-                  <Bar dataKey="Accel Load" fill="#ea580c" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          <div className="h-64 w-full pt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={compareData.map((d) => {
+                  let val = 0;
+                  if (activeMetric === 'RPE') val = d.rpe || 0;
+                  else if (activeMetric === 'distance_m') val = d.distance || 0;
+                  else if (activeMetric === 'accumulated_acceleration_load') val = d.accel || 0;
+                  else if (activeMetric === 'deceleration_load') val = d.decel || 0;
+                  else if (activeMetric === 'jump_load') val = d.jump || 0;
+                  else if (activeMetric === 'mechanical_load') val = d.mech || 0;
 
-          {/* Graphic 3: Deceleration Load */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-xl space-y-3">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <h3 className="text-sm font-black text-rose-400 uppercase tracking-wider">
-                3. Deceleration Load (Braking Demand)
-              </h3>
-              <span className="text-[10px] text-zinc-500 font-bold">Eccentric Muscular Strain</span>
-            </div>
-            <div className="h-56 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={compareData.map((d) => ({
-                    name: `#${d.player.number} ${d.player.displayName}`,
-                    'Decel Load': d.latest?.deceleration_load || 0,
-                  }))}
-                  margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis dataKey="name" stroke="#a1a1aa" fontSize={11} tick={{ fill: '#d4d4d8' }} />
-                  <YAxis stroke="#a1a1aa" fontSize={11} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }}
-                  />
-                  <Bar dataKey="Decel Load" fill="#f43f5e" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Graphic 4: Jump Load */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-xl space-y-3">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <h3 className="text-sm font-black text-purple-400 uppercase tracking-wider">
-                4. Jump Load
-              </h3>
-              <span className="text-[10px] text-zinc-500 font-bold">Vertical Impact Accumulation</span>
-            </div>
-            <div className="h-56 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={compareData.map((d) => ({
-                    name: `#${d.player.number} ${d.player.displayName}`,
-                    'Jump Load': d.latest?.jump_load || 0,
-                  }))}
-                  margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis dataKey="name" stroke="#a1a1aa" fontSize={11} tick={{ fill: '#d4d4d8' }} />
-                  <YAxis stroke="#a1a1aa" fontSize={11} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }}
-                  />
-                  <Bar dataKey="Jump Load" fill="#a855f7" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Graphic 5: Mechanical Load */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-xl space-y-3 lg:col-span-2">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <h3 className="text-sm font-black text-sky-400 uppercase tracking-wider">
-                5. Total Mechanical Load
-              </h3>
-              <span className="text-[10px] text-zinc-500 font-bold">Combined Biomechanical Intensity</span>
-            </div>
-            <div className="h-56 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={compareData.map((d) => ({
-                    name: `#${d.player.number} ${d.player.displayName}`,
-                    'Mech Load': d.latest?.mechanical_load || 0,
-                  }))}
-                  margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis dataKey="name" stroke="#a1a1aa" fontSize={11} tick={{ fill: '#d4d4d8' }} />
-                  <YAxis stroke="#a1a1aa" fontSize={11} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }}
-                  />
-                  <Bar dataKey="Mech Load" fill="#38bdf8" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+                  return {
+                    name: `${d.player.number} ${d.player.displayName}`,
+                    value: Math.round(val),
+                  };
+                })}
+                margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <XAxis dataKey="name" stroke="#a1a1aa" fontSize={11} tick={{ fill: '#d4d4d8' }} />
+                <YAxis stroke="#a1a1aa" fontSize={11} tickFormatter={(v) => Math.round(v).toString()} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }}
+                  formatter={(val: number) => [formatWholeNumber(val), METRIC_CONFIG[activeMetric].label]}
+                />
+                <Bar dataKey="value" fill={METRIC_CONFIG[activeMetric].color} radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>
@@ -366,7 +347,7 @@ export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ play
       <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 flex items-center space-x-3 text-xs text-zinc-400">
         <Info className="w-5 h-5 text-orange-500 shrink-0" />
         <p>
-          <strong className="text-zinc-200">Sports Science Principle:</strong> Higher external load numbers reflect greater movement demands or positional roles, and do not directly imply superior or inferior performance capability.
+          <strong className="text-zinc-200">Sports Science Principle:</strong> Physical load metrics should be compared within context of playing position, tactical role, and session duration or minutes played during session {selectedSession?.date}.
         </p>
       </div>
     </div>

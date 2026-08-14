@@ -80,6 +80,7 @@ export interface SessionMeta {
 export interface RPEEntry {
   id: string;
   player_id: string;
+  player_number?: string;
   session_id: string;
   date: string;
   rpe_score: number; // 1-10 Borg CR10
@@ -87,6 +88,7 @@ export interface RPEEntry {
   sRPE?: number; // RPE * duration_min
   notes?: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface IndividualBaseline {
