@@ -21,12 +21,12 @@ import {
 } from '../data/initialData';
 
 const STORAGE_KEYS = {
-  ROSTER: 'ov_roster_v1',
-  SESSIONS_META: 'ov_sessions_meta_v1',
-  PLAYER_RECORDS: 'ov_player_records_v1',
-  RPE_ENTRIES: 'ov_rpe_entries_v1',
+  ROSTER: 'ov_roster_v2',
+  SESSIONS_META: 'ov_sessions_meta_v2',
+  PLAYER_RECORDS: 'ov_player_records_v2',
+  RPE_ENTRIES: 'ov_rpe_entries_v2',
   SETTINGS: 'ov_settings_v1',
-  AUDIT_LOGS: 'ov_audit_logs_v1',
+  AUDIT_LOGS: 'ov_audit_logs_v2',
 };
 
 // Helper for local storage with initial fallback
@@ -317,25 +317,7 @@ export class DataStore {
 
   // --- RPE DATA MANAGEMENT ---
   static getRPEEntries(): RPEEntry[] {
-    const entries = getStored<RPEEntry[]>(STORAGE_KEYS.RPE_ENTRIES, INITIAL_RPE_ENTRIES);
-    // Ensure default initial August 11 and August 12 entries are preserved
-    const existingKeys = new Set(entries.map((e) => `${e.player_id}_${e.date}`));
-    let updated = false;
-    const merged = [...entries];
-
-    INITIAL_RPE_ENTRIES.forEach((init) => {
-      const key = `${init.player_id}_${init.date}`;
-      if (!existingKeys.has(key)) {
-        merged.push(init);
-        updated = true;
-      }
-    });
-
-    if (updated) {
-      setStored(STORAGE_KEYS.RPE_ENTRIES, merged);
-    }
-
-    return merged;
+    return getStored<RPEEntry[]>(STORAGE_KEYS.RPE_ENTRIES, []);
   }
 
   static saveRPEEntry(entry: Omit<RPEEntry, 'id' | 'created_at'>): RPEEntry {

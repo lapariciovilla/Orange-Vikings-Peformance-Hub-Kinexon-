@@ -125,11 +125,15 @@ export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ play
             onChange={(e) => setSelectedSessionId(e.target.value)}
             className="bg-zinc-900 border border-zinc-700 text-white font-black text-xs rounded px-3 py-1.5 focus:outline-none focus:border-orange-500"
           >
-            {sessionsMeta.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.date} — {s.session_name || s.session_type}
-              </option>
-            ))}
+            {sessionsMeta.length === 0 ? (
+              <option value="">No Sessions Logged Yet</option>
+            ) : (
+              sessionsMeta.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.date} — {s.session_name || s.session_type}
+                </option>
+              ))
+            )}
           </select>
         </div>
       </div>

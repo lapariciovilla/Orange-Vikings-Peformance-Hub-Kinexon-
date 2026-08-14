@@ -106,11 +106,15 @@ export const GamesView: React.FC<GamesViewProps> = ({ roster }) => {
               onChange={(e) => setSelectedGameId(e.target.value)}
               className="bg-zinc-950 border border-orange-500/80 rounded px-3 py-1.5 text-white font-bold"
             >
-              {games.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.date} - {g.session_name}
-                </option>
-              ))}
+              {games.length === 0 ? (
+                <option value="">No Games Logged Yet</option>
+              ) : (
+                games.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.date} - {g.session_name}
+                  </option>
+                ))
+              )}
             </select>
           </div>
         </div>

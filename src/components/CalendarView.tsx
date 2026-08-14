@@ -102,7 +102,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
             <div className="space-y-0.5">
               <div className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">Distance Leader</div>
               <div className="font-bold text-white">
-                {distLeader.player.displayName} ({distLeader.player.number})
+                {distLeader.totalDist > 0 ? `${distLeader.player.displayName} (${distLeader.player.number})` : 'No data logged'}
               </div>
             </div>
             <div className="text-right">
@@ -114,7 +114,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
             <div className="space-y-0.5">
               <div className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">Accumulated Acceleration Load Leader</div>
               <div className="font-bold text-white">
-                {accelLeader.player.displayName} ({accelLeader.player.number})
+                {accelLeader.totalAccel > 0 ? `${accelLeader.player.displayName} (${accelLeader.player.number})` : 'No data logged'}
               </div>
             </div>
             <div className="text-right">
@@ -126,7 +126,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
             <div className="space-y-0.5">
               <div className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">Deceleration Load Leader</div>
               <div className="font-bold text-white">
-                {decelLeader.player.displayName} ({decelLeader.player.number})
+                {decelLeader.totalDecel > 0 ? `${decelLeader.player.displayName} (${decelLeader.player.number})` : 'No data logged'}
               </div>
             </div>
             <div className="text-right">
@@ -138,7 +138,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
             <div className="space-y-0.5">
               <div className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">Jump Load Leader</div>
               <div className="font-bold text-white">
-                {jumpLeader.player.displayName} ({jumpLeader.player.number})
+                {jumpLeader.totalJump > 0 ? `${jumpLeader.player.displayName} (${jumpLeader.player.number})` : 'No data logged'}
               </div>
             </div>
             <div className="text-right">
@@ -150,7 +150,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
             <div className="space-y-0.5">
               <div className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">Mechanical Load Leader</div>
               <div className="font-bold text-white">
-                {mechLeader.player.displayName} ({mechLeader.player.number})
+                {mechLeader.totalMech > 0 ? `${mechLeader.player.displayName} (${mechLeader.player.number})` : 'No data logged'}
               </div>
             </div>
             <div className="text-right">

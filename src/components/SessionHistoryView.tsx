@@ -126,7 +126,16 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
 
       {/* Grid of Sessions */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {sessions.map((session) => {
+        {sessions.length === 0 ? (
+          <div className="col-span-full bg-zinc-900 border border-zinc-800 rounded-xl p-12 text-center text-zinc-500 space-y-3">
+            <CalendarIcon className="w-8 h-8 text-zinc-600 mx-auto" />
+            <p className="text-sm font-bold text-zinc-400">No session history records in database.</p>
+            <p className="text-xs text-zinc-500">
+              Import a Kinexon CSV or add a session manually to start logging performance data for the 2026–2027 season.
+            </p>
+          </div>
+        ) : (
+          sessions.map((session) => {
           const recs = DataStore.getRecordsForSession(session.id);
           const stats = DataStore.calculateTeamAverages(recs);
 
@@ -172,7 +181,8 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
               </div>
             </div>
           );
-        })}
+        })
+        )}
       </div>
 
       {/* Session Details Modal (Centered in the middle of the screen) */}
