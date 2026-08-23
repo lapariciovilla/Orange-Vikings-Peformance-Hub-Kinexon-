@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { PlayerSessionRecord, SessionMeta, CoreMetrics } from '../types';
 import { getPositionalGroup, formatWholeNumber } from '../lib/positionalUtils';
+import { SessionCalendarPicker } from './SessionCalendarPicker';
 import {
   ResponsiveContainer,
   BarChart,
@@ -22,10 +23,13 @@ type MetricKey = keyof CoreMetrics;
 
 const METRIC_CONFIG: Record<MetricKey, { label: string; unit: string; color: string }> = {
   distance_m: { label: 'Total Distance', unit: 'm', color: '#f97316' },
-  accumulated_acceleration_load: { label: 'Accumulated Acceleration Load', unit: '', color: '#f59e0b' },
-  deceleration_load: { label: 'Deceleration Load', unit: '', color: '#f43f5e' },
-  jump_load: { label: 'Jump Load', unit: '', color: '#a855f7' },
-  mechanical_load: { label: 'Mechanical Load', unit: '', color: '#38bdf8' },
+  accumulated_acceleration_load: { label: 'Accumulated Acceleration Load', unit: 'au', color: '#f59e0b' },
+  accumulated_acceleration_load_per_min: { label: 'Accel Load / min', unit: 'au/min', color: '#ea580c' },
+  anaerobic_activity_time: { label: 'Anaerobic Activity Time', unit: 's', color: '#eab308' },
+  deceleration_load: { label: 'Deceleration Load', unit: 'au', color: '#f43f5e' },
+  deceleration_load_per_min: { label: 'Decel Load / min', unit: 'au/min', color: '#e11d48' },
+  jump_load: { label: 'Jump Load', unit: 'au', color: '#a855f7' },
+  mechanical_load: { label: 'Mechanical Load', unit: 'au', color: '#38bdf8' },
 };
 
 export const TeamAnalyticsView: React.FC<TeamAnalyticsViewProps> = ({ sessions, records }) => {
@@ -182,34 +186,21 @@ export const TeamAnalyticsView: React.FC<TeamAnalyticsViewProps> = ({ sessions, 
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-4 text-xs">
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center space-x-2">
-            <Calendar className="w-4 h-4 text-orange-500" />
-            <span className="font-extrabold text-zinc-300 uppercase">From:</span>
-            <select
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="bg-zinc-950 border border-zinc-700 text-white font-bold rounded px-2.5 py-1.5 focus:outline-none focus:border-orange-500"
-            >
-              {availableDates.map((d) => (
-                <option key={`start-${d}`} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
+            <span className="font-extrabold text-zinc-300 uppercase">From Date:</span>
+            <SessionCalendarPicker
+              sessions={sessions}
+              selectedDate={startDate}
+              onSelectDate={(d) => setStartDate(d)}
+            />
           </div>
 
           <div className="flex items-center space-x-2">
-            <span className="font-extrabold text-zinc-300 uppercase">To:</span>
-            <select
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="bg-zinc-950 border border-zinc-700 text-white font-bold rounded px-2.5 py-1.5 focus:outline-none focus:border-orange-500"
-            >
-              {availableDates.map((d) => (
-                <option key={`end-${d}`} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
+            <span className="font-extrabold text-zinc-300 uppercase">To Date:</span>
+            <SessionCalendarPicker
+              sessions={sessions}
+              selectedDate={endDate}
+              onSelectDate={(d) => setEndDate(d)}
+            />
           </div>
         </div>
 

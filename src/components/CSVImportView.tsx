@@ -478,11 +478,47 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
 
             <div>
               <label className="block text-xs font-bold text-orange-400 mb-1">
-                Accumulated Acceleration Load Column
+                Accumulated Accel Load Column
               </label>
               <select
                 value={colAccel}
                 onChange={(e) => setColAccel(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-xs text-white"
+              >
+                <option value="">-- Select Column --</option>
+                {headers.map((h) => (
+                  <option key={h} value={h}>
+                    {h}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-orange-300 mb-1">
+                Accel Load / min Column (Optional)
+              </label>
+              <select
+                value={colAccelMin}
+                onChange={(e) => setColAccelMin(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-xs text-white"
+              >
+                <option value="">-- Select Column (or Auto-Calculated) --</option>
+                {headers.map((h) => (
+                  <option key={h} value={h}>
+                    {h}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-yellow-400 mb-1">
+                Anaerobic Activity Time (s) Column
+              </label>
+              <select
+                value={colAnaerobic}
+                onChange={(e) => setColAnaerobic(e.target.value)}
                 className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-xs text-white"
               >
                 <option value="">-- Select Column --</option>
@@ -504,6 +540,24 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
                 className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-xs text-white"
               >
                 <option value="">-- Select Column --</option>
+                {headers.map((h) => (
+                  <option key={h} value={h}>
+                    {h}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-rose-300 mb-1">
+                Decel Load / min Column (Optional)
+              </label>
+              <select
+                value={colDecelMin}
+                onChange={(e) => setColDecelMin(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-xs text-white"
+              >
+                <option value="">-- Select Column (or Auto-Calculated) --</option>
                 {headers.map((h) => (
                   <option key={h} value={h}>
                     {h}

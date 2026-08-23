@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Player, CoreMetrics } from '../types';
 import { DataStore } from '../lib/dataStore';
 import { formatWholeNumber } from '../lib/positionalUtils';
+import { SessionCalendarPicker } from './SessionCalendarPicker';
 import {
   ResponsiveContainer,
   BarChart,
@@ -125,23 +126,15 @@ export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ play
 
         {/* Date / Session Selector */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 bg-zinc-950 p-3 rounded-lg border border-zinc-800">
-          <Calendar className="w-4 h-4 text-orange-500 shrink-0" />
-          <span className="text-xs font-black text-zinc-300 uppercase whitespace-nowrap">Selected Session:</span>
-          <select
-            value={selectedSessionId}
-            onChange={(e) => setSelectedSessionId(e.target.value)}
-            className="bg-zinc-900 border border-zinc-700 text-white font-black text-xs rounded px-3 py-1.5 focus:outline-none focus:border-orange-500"
-          >
-            {sessionsMeta.length === 0 ? (
-              <option value="">No Sessions Logged Yet</option>
-            ) : (
-              sessionsMeta.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.date} — {s.session_name || s.session_type}
-                </option>
-              ))
-            )}
-          </select>
+          <span className="text-xs font-black text-zinc-300 uppercase whitespace-nowrap">Session Date:</span>
+          <SessionCalendarPicker
+            sessions={sessionsMeta}
+            selectedDate={selectedSession?.date || '2026-08-11'}
+            onSelectDate={(dateStr) => {
+              const matched = sessionsMeta.find((s) => s.date === dateStr);
+              if (matched) setSelectedSessionId(matched.id);
+            }}
+          />
         </div>
       </div>
 
