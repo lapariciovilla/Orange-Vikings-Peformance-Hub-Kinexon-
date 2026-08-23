@@ -37,7 +37,10 @@ type NormalizationMode = 'TOTAL' | 'NORMALIZED';
 const METRIC_LABELS: Record<keyof CoreMetrics, { name: string; unit: string; color: string }> = {
   distance_m: { name: 'Total Distance', unit: 'm', color: '#f59e0b' },
   accumulated_acceleration_load: { name: 'Accumulated Accel Load', unit: 'au', color: '#f97316' },
+  accumulated_acceleration_load_per_min: { name: 'Accel Load / min', unit: 'au/min', color: '#ea580c' },
+  anaerobic_activity_time: { name: 'Anaerobic Activity Time', unit: 's', color: '#eab308' },
   deceleration_load: { name: 'Deceleration Load', unit: 'au', color: '#f43f5e' },
+  deceleration_load_per_min: { name: 'Decel Load / min', unit: 'au/min', color: '#e11d48' },
   jump_load: { name: 'Jump Load', unit: 'au', color: '#a855f7' },
   mechanical_load: { name: 'Mechanical Load', unit: 'au', color: '#38bdf8' },
 };
@@ -472,19 +475,32 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
                   label={{ value: 'RPE (1-10)', angle: 90, position: 'insideRight', fill: '#c084fc', fontSize: 10 }}
                 />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#09090b',
-                    borderColor: '#27272a',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    color: '#fff',
+                  content={({ active, payload }) => {
+                    if (!active || !payload || payload.length === 0) return null;
+                    const data = payload[0].payload;
+                    return (
+                      <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-lg text-xs space-y-1.5 shadow-2xl text-white">
+                        <div className="font-black text-orange-400 border-b border-zinc-800 pb-1">
+                          {data.date} ({data.session_type})
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-zinc-400 font-medium">{activeMetricMeta.name}:</span>
+                          <span className="font-bold text-amber-400">
+                            {formatWholeNumber(data.extVal)} {activeMetricMeta.unit}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-zinc-400 font-medium">Subjective RPE:</span>
+                          <span className="font-bold text-purple-400">
+                            {data.rpe !== null && data.rpe !== undefined ? `${data.rpe} / 10` : 'Not Logged'}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-zinc-500 pt-1 border-t border-zinc-800/80">
+                          Denominator: {data.minutesLabel}
+                        </div>
+                      </div>
+                    );
                   }}
-                  formatter={(val: number, name: string) => [
-                    formatWholeNumber(val),
-                    name === 'Subjective RPE (1-10)'
-                      ? 'Subjective RPE (1-10)'
-                      : `${activeMetricMeta.name} (${normMode === 'NORMALIZED' ? 'Density' : 'Total'})`,
-                  ]}
                 />
                 <Legend />
                 <Bar

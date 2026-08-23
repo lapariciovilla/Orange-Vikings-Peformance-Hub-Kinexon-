@@ -17,13 +17,16 @@ export interface Player {
   notes?: string;
 }
 
-// The 5 primary KINEXON external-load metrics
+// The 8 primary KINEXON external-load metrics
 export interface CoreMetrics {
   distance_m: number | null;
   accumulated_acceleration_load: number | null;
-  mechanical_load: number | null;
+  accumulated_acceleration_load_per_min: number | null;
+  anaerobic_activity_time: number | null; // in seconds
   deceleration_load: number | null;
+  deceleration_load_per_min: number | null;
   jump_load: number | null;
+  mechanical_load: number | null;
 }
 
 export interface RelativeMetrics {

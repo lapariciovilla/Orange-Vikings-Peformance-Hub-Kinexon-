@@ -29,12 +29,23 @@ const STORAGE_KEYS = {
   AUDIT_LOGS: 'ov_audit_logs_v2',
 };
 
-// Helper for local storage with initial fallback
+// Helper for local storage with initial fallback and non-destructive legacy key support
 function getStored<T>(key: string, fallback: T): T {
   try {
     const item = localStorage.getItem(key);
     if (item) {
       return JSON.parse(item);
+    }
+    // Check fallback for v1 if key ends with _v2 (non-destructive preservation)
+    if (key.endsWith('_v2')) {
+      const v1Key = key.replace('_v2', '_v1');
+      const v1Item = localStorage.getItem(v1Key);
+      if (v1Item) {
+        const parsed = JSON.parse(v1Item);
+        // Persist forward to _v2
+        localStorage.setItem(key, v1Item);
+        return parsed;
+      }
     }
   } catch (err) {
     console.error(`Error reading ${key} from localStorage:`, err);
@@ -184,19 +195,37 @@ export class DataStore {
       ? r.game_minutes
       : (r.duration_min && r.duration_min > 0 ? r.duration_min : null);
 
+    const accelPerMin = r.accumulated_acceleration_load_per_min ?? (
+      r.accumulated_acceleration_load !== null && minutes && minutes > 0
+        ? Number((r.accumulated_acceleration_load / minutes).toFixed(2))
+        : null
+    );
+
+    const decelPerMin = r.deceleration_load_per_min ?? (
+      r.deceleration_load !== null && minutes && minutes > 0
+        ? Number((r.deceleration_load / minutes).toFixed(2))
+        : null
+    );
+
+    const updatedRecord: PlayerSessionRecord = {
+      ...r,
+      accumulated_acceleration_load_per_min: accelPerMin,
+      deceleration_load_per_min: decelPerMin,
+    };
+
     if (!minutes || minutes <= 0) {
-      return { ...r, relative: undefined };
+      return { ...updatedRecord, relative: undefined };
     }
 
     const relative: RelativeMetrics = {
       distance_per_min: r.distance_m !== null ? Number((r.distance_m / minutes).toFixed(1)) : null,
-      accel_load_per_min: r.accumulated_acceleration_load !== null ? Number((r.accumulated_acceleration_load / minutes).toFixed(2)) : null,
+      accel_load_per_min: accelPerMin,
       mechanical_load_per_min: r.mechanical_load !== null ? Number((r.mechanical_load / minutes).toFixed(2)) : null,
-      decel_load_per_min: r.deceleration_load !== null ? Number((r.deceleration_load / minutes).toFixed(2)) : null,
+      decel_load_per_min: decelPerMin,
       jump_load_per_min: r.jump_load !== null ? Number((r.jump_load / minutes).toFixed(2)) : null,
     };
 
-    return { ...r, relative };
+    return { ...updatedRecord, relative };
   }
 
   static savePlayerRecords(records: PlayerSessionRecord[]): void {

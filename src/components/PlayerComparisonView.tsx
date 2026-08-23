@@ -22,7 +22,10 @@ type CompareMetricKey = keyof CoreMetrics | 'RPE';
 const METRIC_CONFIG: Record<CompareMetricKey, { label: string; unit: string; color: string }> = {
   distance_m: { label: 'Total Distance', unit: 'm', color: '#f59e0b' },
   accumulated_acceleration_load: { label: 'Accumulated Accel Load', unit: 'au', color: '#ea580c' },
+  accumulated_acceleration_load_per_min: { label: 'Accel Load / min', unit: 'au/min', color: '#f97316' },
+  anaerobic_activity_time: { label: 'Anaerobic Activity Time', unit: 's', color: '#eab308' },
   deceleration_load: { label: 'Deceleration Load', unit: 'au', color: '#f43f5e' },
+  deceleration_load_per_min: { label: 'Decel Load / min', unit: 'au/min', color: '#e11d48' },
   jump_load: { label: 'Jump Load', unit: 'au', color: '#a855f7' },
   mechanical_load: { label: 'Mechanical Load', unit: 'au', color: '#38bdf8' },
   RPE: { label: 'Subjective RPE', unit: '1-10', color: '#c084fc' },
@@ -91,13 +94,17 @@ export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ play
         minutes,
         distance: getVal('distance_m'),
         accel: getVal('accumulated_acceleration_load'),
+        accelMin: getVal('accumulated_acceleration_load_per_min'),
+        anaerobic: getVal('anaerobic_activity_time'),
         decel: getVal('deceleration_load'),
+        decelMin: getVal('deceleration_load_per_min'),
         jump: getVal('jump_load'),
         mech: getVal('mechanical_load'),
         rpe: rec?.RPE ?? null,
+        activeValue: getVal(activeMetric),
       };
     });
-  }, [selectedPlayerIds, players, sessionRecords, isGame, normMode]);
+  }, [selectedPlayerIds, players, sessionRecords, isGame, normMode, activeMetric]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 text-zinc-100">
@@ -317,28 +324,38 @@ export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ play
           <div className="h-64 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={compareData.map((d) => {
-                  let val = 0;
-                  if (activeMetric === 'RPE') val = d.rpe || 0;
-                  else if (activeMetric === 'distance_m') val = d.distance || 0;
-                  else if (activeMetric === 'accumulated_acceleration_load') val = d.accel || 0;
-                  else if (activeMetric === 'deceleration_load') val = d.decel || 0;
-                  else if (activeMetric === 'jump_load') val = d.jump || 0;
-                  else if (activeMetric === 'mechanical_load') val = d.mech || 0;
-
-                  return {
-                    name: `${d.player.number} ${d.player.displayName}`,
-                    value: Math.round(val),
-                  };
-                })}
+                data={compareData.map((d) => ({
+                  name: `${d.player.number} ${d.player.displayName}`,
+                  value: d.activeValue !== null && d.activeValue !== undefined ? Number(d.activeValue.toFixed(1)) : 0,
+                  rawVal: d.activeValue,
+                  playerName: d.player.displayName,
+                  date: selectedSession?.date || 'N/A',
+                }))}
                 margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                 <XAxis dataKey="name" stroke="#a1a1aa" fontSize={11} tick={{ fill: '#d4d4d8' }} />
                 <YAxis stroke="#a1a1aa" fontSize={11} tickFormatter={(v) => Math.round(v).toString()} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }}
-                  formatter={(val: number) => [formatWholeNumber(val), METRIC_CONFIG[activeMetric].label]}
+                  content={({ active, payload }) => {
+                    if (!active || !payload || payload.length === 0) return null;
+                    const item = payload[0].payload;
+                    const cfg = METRIC_CONFIG[activeMetric];
+                    return (
+                      <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-lg text-xs space-y-1 shadow-2xl text-white">
+                        <div className="font-black text-orange-400 border-b border-zinc-800 pb-1">
+                          {item.playerName}
+                        </div>
+                        <div>Session Date: <span className="font-bold text-zinc-300">{item.date}</span></div>
+                        <div>Metric: <span className="font-bold text-zinc-300">{cfg.label}</span></div>
+                        <div>
+                          Value: <span className="font-black text-amber-400">
+                            {item.rawVal !== null ? `${formatWholeNumber(item.rawVal)} ${cfg.unit}` : 'No data available'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  }}
                 />
                 <Bar dataKey="value" fill={METRIC_CONFIG[activeMetric].color} radius={[6, 6, 0, 0]} />
               </BarChart>

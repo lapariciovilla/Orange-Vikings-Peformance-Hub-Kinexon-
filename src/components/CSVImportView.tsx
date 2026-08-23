@@ -27,7 +27,10 @@ interface ParsedRow {
   playerIdentifier: string;
   distance: number | null;
   accelLoad: number | null;
+  accelLoadPerMin: number | null;
+  anaerobicTime: number | null;
   decelLoad: number | null;
+  decelLoadPerMin: number | null;
   jumpLoad: number | null;
   mechLoad: number | null;
   status: 'MATCHED' | 'REVIEW' | 'UNMATCHED';
@@ -40,12 +43,15 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
   const [headers, setHeaders] = useState<string[]>([]);
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
 
-  // Column Mapping
+  // Column Mapping for 8 Core Metrics
   const [colPlayer, setColPlayer] = useState<string>('');
   const [colJersey, setColJersey] = useState<string>('');
   const [colDistance, setColDistance] = useState<string>('');
   const [colAccel, setColAccel] = useState<string>('');
+  const [colAccelMin, setColAccelMin] = useState<string>('');
+  const [colAnaerobic, setColAnaerobic] = useState<string>('');
   const [colDecel, setColDecel] = useState<string>('');
+  const [colDecelMin, setColDecelMin] = useState<string>('');
   const [colJump, setColJump] = useState<string>('');
   const [colMech, setColMech] = useState<string>('');
 
@@ -94,8 +100,11 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
           if (lower.includes('player') || lower.includes('name')) setColPlayer(f);
           if (lower.includes('jersey') || lower.includes('#') || lower.includes('num')) setColJersey(f);
           if (lower.includes('distance')) setColDistance(f);
-          if (lower.includes('accel')) setColAccel(f);
-          if (lower.includes('decel')) setColDecel(f);
+          if (lower.includes('accel') && (lower.includes('min') || lower.includes('/'))) setColAccelMin(f);
+          else if (lower.includes('accel')) setColAccel(f);
+          if (lower.includes('anaerobic')) setColAnaerobic(f);
+          if (lower.includes('decel') && (lower.includes('min') || lower.includes('/'))) setColDecelMin(f);
+          else if (lower.includes('decel')) setColDecel(f);
           if (lower.includes('jump')) setColJump(f);
           if (lower.includes('mech')) setColMech(f);
         });
@@ -143,7 +152,10 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
 
       const dist = parseNum(row[colDistance]);
       const accel = parseNum(row[colAccel]);
+      const accelMin = parseNum(row[colAccelMin]);
+      const anaerobic = parseNum(row[colAnaerobic]);
       const decel = parseNum(row[colDecel]);
+      const decelMin = parseNum(row[colDecelMin]);
       const jump = parseNum(row[colJump]);
       const mech = parseNum(row[colMech]);
 
@@ -160,7 +172,10 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
         playerIdentifier: identifier || 'Unknown Row',
         distance: dist,
         accelLoad: accel,
+        accelLoadPerMin: accelMin,
+        anaerobicTime: anaerobic,
         decelLoad: decel,
+        decelLoadPerMin: decelMin,
         jumpLoad: jump,
         mechLoad: mech,
         status,
@@ -217,7 +232,10 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
           position: player.position,
           distance_m: r.distance,
           accumulated_acceleration_load: r.accelLoad,
+          accumulated_acceleration_load_per_min: r.accelLoadPerMin,
+          anaerobic_activity_time: r.anaerobicTime,
           deceleration_load: r.decelLoad,
+          deceleration_load_per_min: r.decelLoadPerMin,
           jump_load: r.jumpLoad,
           mechanical_load: r.mechLoad,
           source: 'CSV',

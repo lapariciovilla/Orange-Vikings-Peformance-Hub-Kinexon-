@@ -123,12 +123,24 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
         format: 'a4',
       });
 
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const imgWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
 
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
       pdf.save(`Orange_Vikings_SC_Report_${selectedDate}_${reportType}.pdf`);
-      showToast('PDF downloaded successfully!');
+      showToast('Multi-page PDF downloaded successfully!');
     } catch (err) {
       console.error('PDF export failed, falling back to print dialog:', err);
       window.print();

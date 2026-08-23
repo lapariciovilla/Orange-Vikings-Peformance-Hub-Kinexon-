@@ -260,29 +260,40 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
                 <table className="w-full text-left text-xs text-zinc-300">
                   <thead className="bg-zinc-900 text-zinc-400 font-black uppercase text-[10px] border-b border-zinc-800">
                     <tr>
-                      <th className="p-3">Athlete</th>
-                      <th className="p-3">Distance (m)</th>
-                      <th className="p-3">Accel Load</th>
-                      <th className="p-3">Decel Load</th>
-                      <th className="p-3">Jump Load</th>
-                      <th className="p-3">Mech Load</th>
-                      <th className="p-3">Actions</th>
+                      <th className="p-2.5">Athlete</th>
+                      <th className="p-2.5">Distance (m)</th>
+                      <th className="p-2.5">Accel Load</th>
+                      <th className="p-2.5">Accel/min</th>
+                      <th className="p-2.5">Anaerobic (s)</th>
+                      <th className="p-2.5">Decel Load</th>
+                      <th className="p-2.5">Decel/min</th>
+                      <th className="p-2.5">Jump Load</th>
+                      <th className="p-2.5">Mech Load</th>
+                      <th className="p-2.5">RPE</th>
+                      <th className="p-2.5">Denominator Context</th>
+                      <th className="p-2.5">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800 bg-zinc-950">
                     {selectedRecords.map((rec) => {
                       const isEditing = editingRecordId === rec.id;
+                      const minutes = rec.session_type === 'Game' && rec.game_minutes && rec.game_minutes > 0
+                        ? rec.game_minutes
+                        : (rec.duration_min && rec.duration_min > 0 ? rec.duration_min : null);
+                      const denomLabel = rec.session_type === 'Game'
+                        ? (rec.game_minutes ? `${rec.game_minutes} Min Played (Game)` : 'Min Played Unset')
+                        : (rec.duration_min ? `${rec.duration_min} Min Duration (Practice)` : 'Duration Unset');
 
                       return (
                         <tr key={rec.id} className="hover:bg-zinc-900/50">
-                          <td className="p-3 font-bold text-white">
-                            <span className="text-orange-400 mr-1.5">{rec.player_number}</span>
+                          <td className="p-2.5 font-bold text-white whitespace-nowrap">
+                            <span className="text-orange-400 mr-1">{rec.player_number}</span>
                             {rec.player_name}
                           </td>
 
                           {isEditing ? (
                             <>
-                              <td className="p-2">
+                              <td className="p-1">
                                 <input
                                   type="number"
                                   value={editForm.distance_m ?? ''}
@@ -292,10 +303,10 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
                                       distance_m: e.target.value ? parseFloat(e.target.value) : null,
                                     })
                                   }
-                                  className="w-20 bg-zinc-900 border border-orange-500 rounded px-2 py-1 text-xs text-white"
+                                  className="w-16 bg-zinc-900 border border-orange-500 rounded px-1.5 py-1 text-xs text-white"
                                 />
                               </td>
-                              <td className="p-2">
+                              <td className="p-1">
                                 <input
                                   type="number"
                                   value={editForm.accumulated_acceleration_load ?? ''}
@@ -307,10 +318,26 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
                                         : null,
                                     })
                                   }
-                                  className="w-16 bg-zinc-900 border border-orange-500 rounded px-2 py-1 text-xs text-white"
+                                  className="w-14 bg-zinc-900 border border-orange-500 rounded px-1.5 py-1 text-xs text-white"
                                 />
                               </td>
-                              <td className="p-2">
+                              <td className="p-1 text-zinc-500 text-[10px] font-bold">Auto</td>
+                              <td className="p-1">
+                                <input
+                                  type="number"
+                                  value={editForm.anaerobic_activity_time ?? ''}
+                                  onChange={(e) =>
+                                    setEditForm({
+                                      ...editForm,
+                                      anaerobic_activity_time: e.target.value
+                                        ? parseFloat(e.target.value)
+                                        : null,
+                                    })
+                                  }
+                                  className="w-14 bg-zinc-900 border border-orange-500 rounded px-1.5 py-1 text-xs text-white"
+                                />
+                              </td>
+                              <td className="p-1">
                                 <input
                                   type="number"
                                   value={editForm.deceleration_load ?? ''}
@@ -322,10 +349,11 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
                                         : null,
                                     })
                                   }
-                                  className="w-16 bg-zinc-900 border border-orange-500 rounded px-2 py-1 text-xs text-white"
+                                  className="w-14 bg-zinc-900 border border-orange-500 rounded px-1.5 py-1 text-xs text-white"
                                 />
                               </td>
-                              <td className="p-2">
+                              <td className="p-1 text-zinc-500 text-[10px] font-bold">Auto</td>
+                              <td className="p-1">
                                 <input
                                   type="number"
                                   value={editForm.jump_load ?? ''}
@@ -335,10 +363,10 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
                                       jump_load: e.target.value ? parseFloat(e.target.value) : null,
                                     })
                                   }
-                                  className="w-16 bg-zinc-900 border border-orange-500 rounded px-2 py-1 text-xs text-white"
+                                  className="w-14 bg-zinc-900 border border-orange-500 rounded px-1.5 py-1 text-xs text-white"
                                 />
                               </td>
-                              <td className="p-2">
+                              <td className="p-1">
                                 <input
                                   type="number"
                                   value={editForm.mechanical_load ?? ''}
@@ -350,37 +378,74 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
                                         : null,
                                     })
                                   }
-                                  className="w-16 bg-zinc-900 border border-orange-500 rounded px-2 py-1 text-xs text-white"
+                                  className="w-14 bg-zinc-900 border border-orange-500 rounded px-1.5 py-1 text-xs text-white"
                                 />
                               </td>
-                              <td className="p-2">
+                              <td className="p-1">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="10"
+                                  value={editForm.RPE ?? ''}
+                                  onChange={(e) =>
+                                    setEditForm({
+                                      ...editForm,
+                                      RPE: e.target.value ? parseFloat(e.target.value) : null,
+                                    })
+                                  }
+                                  className="w-12 bg-zinc-900 border border-orange-500 rounded px-1.5 py-1 text-xs text-white font-bold"
+                                />
+                              </td>
+                              <td className="p-1 text-[10px] text-zinc-400 whitespace-nowrap">{denomLabel}</td>
+                              <td className="p-1">
                                 <button
                                   onClick={handleSaveEdit}
-                                  className="bg-orange-600 text-zinc-950 font-black px-2.5 py-1 rounded text-xs flex items-center space-x-1"
+                                  className="bg-orange-600 text-zinc-950 font-black px-2 py-1 rounded text-xs flex items-center space-x-1"
                                 >
-                                  <Save className="w-3.5 h-3.5" />
+                                  <Save className="w-3 h-3" />
                                   <span>Save</span>
                                 </button>
                               </td>
                             </>
                           ) : (
                             <>
-                              <td className="p-3 font-extrabold text-amber-400">
+                              <td className="p-2.5 font-extrabold text-amber-400">
                                 {rec.distance_m !== null ? `${formatWholeNumber(rec.distance_m)} m` : 'N/A'}
                               </td>
-                              <td className="p-3 font-bold text-orange-400">
+                              <td className="p-2.5 font-bold text-orange-400">
                                 {rec.accumulated_acceleration_load !== null ? formatWholeNumber(rec.accumulated_acceleration_load) : 'N/A'}
                               </td>
-                              <td className="p-3 font-bold text-rose-400">
+                              <td className="p-2.5 font-bold text-orange-300">
+                                {rec.accumulated_acceleration_load_per_min !== null && rec.accumulated_acceleration_load_per_min !== undefined
+                                  ? rec.accumulated_acceleration_load_per_min.toFixed(2)
+                                  : 'N/A'}
+                              </td>
+                              <td className="p-2.5 font-bold text-yellow-400">
+                                {rec.anaerobic_activity_time !== null && rec.anaerobic_activity_time !== undefined
+                                  ? `${formatWholeNumber(rec.anaerobic_activity_time)} s`
+                                  : 'N/A'}
+                              </td>
+                              <td className="p-2.5 font-bold text-rose-400">
                                 {rec.deceleration_load !== null ? formatWholeNumber(rec.deceleration_load) : 'N/A'}
                               </td>
-                              <td className="p-3 font-bold text-purple-400">
+                              <td className="p-2.5 font-bold text-rose-300">
+                                {rec.deceleration_load_per_min !== null && rec.deceleration_load_per_min !== undefined
+                                  ? rec.deceleration_load_per_min.toFixed(2)
+                                  : 'N/A'}
+                              </td>
+                              <td className="p-2.5 font-bold text-purple-400">
                                 {rec.jump_load !== null ? formatWholeNumber(rec.jump_load) : 'N/A'}
                               </td>
-                              <td className="p-3 font-bold text-sky-400">
+                              <td className="p-2.5 font-bold text-sky-400">
                                 {rec.mechanical_load !== null ? formatWholeNumber(rec.mechanical_load) : 'N/A'}
                               </td>
-                              <td className="p-3">
+                              <td className="p-2.5 font-black text-purple-300">
+                                {rec.RPE !== null && rec.RPE !== undefined ? `${rec.RPE} / 10` : 'Unset'}
+                              </td>
+                              <td className="p-2.5 text-[10px] text-zinc-400 font-medium whitespace-nowrap">
+                                {denomLabel}
+                              </td>
+                              <td className="p-2.5">
                                 <button
                                   onClick={() => handleStartEdit(rec)}
                                   className="text-zinc-400 hover:text-orange-400 p-1"
