@@ -12,6 +12,7 @@ import {
   Info,
   ChevronRight,
   Upload,
+  Flame,
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -51,6 +52,22 @@ const METRIC_CONFIGS: Record<
     color: 'text-orange-500',
     barColor: 'bg-orange-500',
   },
+  accumulated_acceleration_load_per_min: {
+    title: 'ACCEL LOAD / MIN',
+    secondary: 'Acceleration intensity density',
+    unit: 'au/min',
+    icon: Zap,
+    color: 'text-orange-400',
+    barColor: 'bg-orange-400',
+  },
+  anaerobic_activity_time: {
+    title: 'ANAEROBIC ACTIVITY TIME',
+    secondary: 'High-intensity anaerobic exposure',
+    unit: 'min',
+    icon: Flame,
+    color: 'text-yellow-400',
+    barColor: 'bg-yellow-400',
+  },
   deceleration_load: {
     title: 'DECELERATION LOAD',
     secondary: 'Braking and deceleration demand',
@@ -58,6 +75,14 @@ const METRIC_CONFIGS: Record<
     icon: ArrowDownCircle,
     color: 'text-rose-500',
     barColor: 'bg-rose-500',
+  },
+  deceleration_load_per_min: {
+    title: 'DECEL LOAD / MIN',
+    secondary: 'Deceleration intensity density',
+    unit: 'au/min',
+    icon: ArrowDownCircle,
+    color: 'text-rose-400',
+    barColor: 'bg-rose-400',
   },
   jump_load: {
     title: 'JUMP LOAD',

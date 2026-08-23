@@ -64,3 +64,49 @@ export function formatWholeNumber(val: number | null | undefined, fallback = '0'
   }
   return Math.round(val).toLocaleString();
 }
+
+/**
+ * Parses Anaerobic Activity Time from Kinexon CSV exports.
+ * Supports timestamp strings like "00:07:34" or "00:11:08" or "07:34",
+ * as well as raw numeric values.
+ * Reads first 2 as hours, next 2 as minutes, next 2 as seconds.
+ * Converts to minutes rounded to nearest whole minute.
+ */
+export function parseAnaerobicTimeToMinutes(val: string | number | null | undefined): number | null {
+  if (val === null || val === undefined || val === '') return null;
+  const str = String(val).trim();
+  if (!str) return null;
+
+  // Handle timestamp strings with colons, e.g., "00:07:34", "00:11:08", "07:34"
+  if (str.includes(':')) {
+    const parts = str.split(':').map((p) => p.trim());
+    if (parts.length === 3) {
+      // Format: HH:MM:SS (Hours:Minutes:Seconds)
+      const h = parseInt(parts[0], 10) || 0;
+      const m = parseInt(parts[1], 10) || 0;
+      const s = parseInt(parts[2], 10) || 0;
+      const totalSecs = h * 3600 + m * 60 + s;
+      if (totalSecs === 0) return 0;
+      return Math.round(totalSecs / 60) || 1;
+    } else if (parts.length === 2) {
+      // Format: MM:SS (Minutes:Seconds)
+      const m = parseInt(parts[0], 10) || 0;
+      const s = parseInt(parts[1], 10) || 0;
+      const totalSecs = m * 60 + s;
+      if (totalSecs === 0) return 0;
+      return Math.round(totalSecs / 60) || 1;
+    }
+  }
+
+  // Handle numeric value
+  const num = parseFloat(str.replace(/,/g, ''));
+  if (isNaN(num)) return null;
+
+  // If passed as raw seconds (> 120), convert to minutes
+  if (num > 120) {
+    return Math.round(num / 60) || 1;
+  }
+
+  return Math.round(num);
+}
+

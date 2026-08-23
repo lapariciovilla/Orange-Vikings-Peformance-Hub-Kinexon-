@@ -113,39 +113,70 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
   const handleDownloadPDF = async () => {
     setIsExporting(true);
     try {
-      const pageElements = Array.from(document.querySelectorAll('.sc-report-page')) as HTMLElement[];
-      if (pageElements.length === 0) {
+      const docEl = document.getElementById('sc-report-document');
+      if (!docEl) {
         window.print();
         return;
       }
 
+      const pageElements = Array.from(docEl.querySelectorAll('.sc-report-page')) as HTMLElement[];
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4',
       });
 
-      for (let i = 0; i < pageElements.length; i++) {
-        const el = pageElements[i];
-        const canvas = await html2canvas(el, {
+      const pdfWidth = pdf.internal.pageSize.getWidth(); // 210mm
+      const pdfHeight = pdf.internal.pageSize.getHeight(); // 297mm
+
+      if (pageElements.length > 0) {
+        for (let i = 0; i < pageElements.length; i++) {
+          const el = pageElements[i];
+          const canvas = await html2canvas(el, {
+            scale: 2,
+            useCORS: true,
+            allowTaint: true,
+            logging: false,
+            backgroundColor: '#09090b',
+          });
+
+          const imgData = canvas.toDataURL('image/png');
+          const canvasHeightMm = (canvas.height * pdfWidth) / canvas.width;
+
+          if (i > 0) {
+            pdf.addPage();
+          }
+
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, Math.min(pdfHeight, canvasHeightMm));
+        }
+      } else {
+        const canvas = await html2canvas(docEl, {
           scale: 2,
           useCORS: true,
+          allowTaint: true,
           logging: false,
           backgroundColor: '#09090b',
         });
 
         const imgData = canvas.toDataURL('image/png');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const imgHeightMm = (canvas.height * pdfWidth) / canvas.width;
 
-        if (i > 0) {
+        let heightLeft = imgHeightMm;
+        let position = 0;
+
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeightMm);
+        heightLeft -= pdfHeight;
+
+        while (heightLeft > 0) {
+          position -= pdfHeight;
           pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeightMm);
+          heightLeft -= pdfHeight;
         }
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       }
 
       pdf.save(`Orange_Vikings_SC_Report_${selectedDate}_${reportType}.pdf`);
-      showToast('Clean multi-page PDF generated & downloaded!');
+      showToast('Multi-page PDF generated & downloaded successfully!');
     } catch (err) {
       console.error('PDF export failed, falling back to print dialog:', err);
       window.print();
@@ -322,11 +353,9 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
           {/* Official Header */}
           <div className="border-b-2 border-orange-500 pb-4 flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <img
-                src="https://i.postimg.cc/QxTv6dV1/icon-ogp.webp"
-                alt="Orange Vikings Logo"
-                className="w-12 h-12 rounded bg-zinc-900 p-1 border border-orange-500 print:border-black"
-              />
+              <div className="w-12 h-12 rounded-lg bg-orange-600 font-black text-zinc-950 flex items-center justify-center text-lg tracking-tighter border border-amber-400 shadow-md shrink-0 print:border-black">
+                EOV
+              </div>
               <div>
                 <div className="text-orange-500 print:text-orange-600 font-black text-xs uppercase tracking-widest">
                   EHIME ORANGE VIKINGS • STRENGTH & CONDITIONING ANALYTICS

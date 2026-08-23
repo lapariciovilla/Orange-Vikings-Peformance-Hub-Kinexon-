@@ -133,18 +133,18 @@ export const DEFAULT_SETTINGS: CoachSettings = {
 export const INITIAL_RPE_ENTRIES: RPEEntry[] = [];
 
 // Sample CSV export content that coach Luis can copy/download to test Kinexon CSV import with all 8 core metrics
-export const SAMPLE_KINEXON_CSV_CONTENT = `Player Name,Jersey #,Distance (m),Accumulated Accel Load,Accumulated Accel Load / min,Anaerobic Activity Time (s),Deceleration Load,Deceleration Load / min,Jump Load,Mechanical Load
-Ryuji Aoki,8,7120,148.0,1.85,340,122.5,1.53,36,910.0
-Nemanja Radovic,11,5410,96.2,1.20,210,84.1,1.05,45,720.5
-Matt Haarms,16,5890,108.4,1.35,280,94.0,1.18,58,830.0
-Takamichi Kodama,14,6526,138.0,1.72,310,112.9,1.41,28,845.2
-Takumi Furuno,2,4999,105.4,1.32,230,88.1,1.10,19,650.0
-Yoshihiko Toshino,13,4031,84.2,1.05,180,71.0,0.89,15,520.3
-Eiji Hayashi,1,5003,108.9,1.36,245,91.3,1.14,25,665.8
-Riki Takeuchi,17,4148,87.6,1.09,195,73.5,0.92,18,542.1
-Shaquille Hines,44,5890,121.5,1.52,290,104.2,1.30,38,788.6
-Mitchell Watt,50,5110,89.5,1.12,205,76.2,0.95,36,695.2
-Shogo Tamaki,65,4724,98.1,1.23,220,82.4,1.03,22,610.1
-Ryo Tawatari,78,4823,101.2,1.26,225,85.6,1.07,21,631.5
-Michael Parker,3,5430,115.0,1.44,260,96.8,1.21,31,732.0
+export const SAMPLE_KINEXON_CSV_CONTENT = `Player Name,Jersey #,Distance (m),Accumulated Accel Load,Accumulated Accel Load / min,Anaerobic Activity Time,Deceleration Load,Deceleration Load / min,Jump Load,Mechanical Load
+Ryuji Aoki,8,7120,148.0,1.85,00:07:34,122.5,1.53,36,910.0
+Nemanja Radovic,11,5410,96.2,1.20,00:11:08,84.1,1.05,45,720.5
+Matt Haarms,16,5890,108.4,1.35,00:04:40,94.0,1.18,58,830.0
+Takamichi Kodama,14,6526,138.0,1.72,00:05:10,112.9,1.41,28,845.2
+Takumi Furuno,2,4999,105.4,1.32,00:03:50,88.1,1.10,19,650.0
+Yoshihiko Toshino,13,4031,84.2,1.05,00:03:00,71.0,0.89,15,520.3
+Eiji Hayashi,1,5003,108.9,1.36,00:04:05,91.3,1.14,25,665.8
+Riki Takeuchi,17,4148,87.6,1.09,00:03:15,73.5,0.92,18,542.1
+Shaquille Hines,44,5890,121.5,1.52,00:04:50,104.2,1.30,38,788.6
+Mitchell Watt,50,5110,89.5,1.12,00:03:25,76.2,0.95,36,695.2
+Shogo Tamaki,65,4724,98.1,1.23,00:03:40,82.4,1.03,22,610.1
+Ryo Tawatari,78,4823,101.2,1.26,00:03:45,85.6,1.07,21,631.5
+Michael Parker,3,5430,115.0,1.44,00:04:20,96.8,1.21,31,732.0
 `;

@@ -3,6 +3,7 @@ import Papa from 'papaparse';
 import { Player, SessionType, SessionMeta, PlayerSessionRecord } from '../types';
 import { DataStore } from '../lib/dataStore';
 import { SAMPLE_KINEXON_CSV_CONTENT } from '../data/initialData';
+import { parseAnaerobicTimeToMinutes } from '../lib/positionalUtils';
 import {
   Upload,
   FileSpreadsheet,
@@ -153,7 +154,7 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
       const dist = parseNum(row[colDistance]);
       const accel = parseNum(row[colAccel]);
       const accelMin = parseNum(row[colAccelMin]);
-      const anaerobic = parseNum(row[colAnaerobic]);
+      const anaerobic = parseAnaerobicTimeToMinutes(row[colAnaerobic]);
       const decel = parseNum(row[colDecel]);
       const decelMin = parseNum(row[colDecelMin]);
       const jump = parseNum(row[colJump]);
@@ -652,6 +653,7 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
                   <th className="p-3">Matched Roster Player</th>
                   <th className="p-3">Distance (m)</th>
                   <th className="p-3">Accel Load</th>
+                  <th className="p-3">Anaerobic Time</th>
                   <th className="p-3">Decel Load</th>
                   <th className="p-3">Jump Load</th>
                   <th className="p-3">Mech Load</th>
@@ -689,6 +691,9 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
                     </td>
                     <td className="p-3 font-semibold text-zinc-300">
                       {row.accelLoad !== null ? row.accelLoad : 'N/A'}
+                    </td>
+                    <td className="p-3 font-bold text-yellow-400">
+                      {row.anaerobicTime !== null ? `${row.anaerobicTime} min` : 'N/A'}
                     </td>
                     <td className="p-3 font-semibold text-zinc-300">
                       {row.decelLoad !== null ? row.decelLoad : 'N/A'}
