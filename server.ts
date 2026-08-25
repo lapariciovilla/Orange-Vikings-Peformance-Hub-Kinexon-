@@ -19,6 +19,63 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// Game Sheet / Box Score Vision OCR Endpoint
+app.post("/api/ai/parse-gamesheet", async (req, res) => {
+  try {
+    const { imageBase64, mimeType } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (apiKey && imageBase64) {
+      try {
+        const ai = new GoogleGenAI({
+          apiKey,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build',
+            },
+          },
+        });
+
+        const response = await ai.models.generateContent({
+          model: "gemini-3.6-flash",
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  inlineData: {
+                    data: imageBase64.replace(/^data:image\/\w+;base64,/, ""),
+                    mimeType: mimeType || "image/png",
+                  },
+                },
+                {
+                  text: "Extract all basketball player names, jersey numbers, and minutes played (MIN / MINS / MINUTES) from this game sheet / box score image. Return STRICTLY a JSON array of objects without markdown backticks: [{\"number\": \"8\", \"name\": \"Ryuji Aoki\", \"minutes\": 24}, ...]",
+                },
+              ],
+            },
+          ],
+        });
+
+        const replyText = response.text || "";
+        const cleaned = replyText.replace(/```json/g, "").replace(/```/g, "").trim();
+        try {
+          const parsed = JSON.parse(cleaned);
+          return res.json({ players: parsed, success: true });
+        } catch (e) {
+          console.warn("Failed to parse JSON output from Gemini OCR:", replyText);
+        }
+      } catch (err: any) {
+        console.warn("Gemini OCR failed, returning empty list:", err.message);
+      }
+    }
+
+    return res.json({ players: [], success: false, message: "OCR processed locally" });
+  } catch (error: any) {
+    console.error("Game Sheet OCR error:", error);
+    res.status(500).json({ error: "Failed to parse game sheet image" });
+  }
+});
+
 // AI Performance Analyst Endpoint
 app.post("/api/ai/chat", async (req, res) => {
   try {

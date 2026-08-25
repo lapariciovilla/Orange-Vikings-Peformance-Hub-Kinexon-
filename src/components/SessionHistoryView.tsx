@@ -264,7 +264,7 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
                       <th className="p-2.5">Distance (m)</th>
                       <th className="p-2.5">Accel Load</th>
                       <th className="p-2.5">Accel/min</th>
-                      <th className="p-2.5">Anaerobic (s)</th>
+                      <th className="p-2.5">Anaerobic (min)</th>
                       <th className="p-2.5">Decel Load</th>
                       <th className="p-2.5">Decel/min</th>
                       <th className="p-2.5">Jump Load</th>
@@ -422,7 +422,7 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
                               </td>
                               <td className="p-2.5 font-bold text-yellow-400">
                                 {rec.anaerobic_activity_time !== null && rec.anaerobic_activity_time !== undefined
-                                  ? `${formatWholeNumber(rec.anaerobic_activity_time)} s`
+                                  ? `${formatWholeNumber(rec.anaerobic_activity_time > 60 ? rec.anaerobic_activity_time / 60 : rec.anaerobic_activity_time)} min`
                                   : 'N/A'}
                               </td>
                               <td className="p-2.5 font-bold text-rose-400">

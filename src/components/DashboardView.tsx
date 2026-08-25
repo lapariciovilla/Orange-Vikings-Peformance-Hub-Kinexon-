@@ -159,8 +159,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 5 Core Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      {/* 8 Core Metric Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {(Object.keys(METRIC_CONFIGS) as MetricKey[]).map((key) => {
           const cfg = METRIC_CONFIGS[key];
           const Icon = cfg.icon;
@@ -169,13 +169,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           if (key === 'distance_m') {
             avgVal = averages.avg_distance !== null ? `${averages.avg_distance.toLocaleString()} m` : 'N/A';
           } else if (key === 'accumulated_acceleration_load') {
-            avgVal = averages.avg_accel !== null ? averages.avg_accel : 'N/A';
+            avgVal = averages.avg_accel !== null ? `${averages.avg_accel} au` : 'N/A';
+          } else if (key === 'accumulated_acceleration_load_per_min') {
+            avgVal = averages.avg_accel_per_min !== null ? `${averages.avg_accel_per_min} au/min` : 'N/A';
+          } else if (key === 'anaerobic_activity_time') {
+            avgVal = averages.avg_anaerobic !== null ? `${averages.avg_anaerobic} min` : 'N/A';
           } else if (key === 'deceleration_load') {
-            avgVal = averages.avg_decel !== null ? averages.avg_decel : 'N/A';
+            avgVal = averages.avg_decel !== null ? `${averages.avg_decel} au` : 'N/A';
+          } else if (key === 'deceleration_load_per_min') {
+            avgVal = averages.avg_decel_per_min !== null ? `${averages.avg_decel_per_min} au/min` : 'N/A';
           } else if (key === 'jump_load') {
-            avgVal = averages.avg_jump !== null ? averages.avg_jump : 'N/A';
+            avgVal = averages.avg_jump !== null ? `${averages.avg_jump} au` : 'N/A';
           } else if (key === 'mechanical_load') {
-            avgVal = averages.avg_mechanical !== null ? averages.avg_mechanical : 'N/A';
+            avgVal = averages.avg_mechanical !== null ? `${averages.avg_mechanical} au` : 'N/A';
           }
 
           const hasData = avgVal !== 'N/A';
@@ -215,6 +221,79 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           );
         })}
       </div>
+
+      {/* Traffic-Light Load Status & Next-Session Guidance Banner */}
+      {(() => {
+        const flagSummaries = records.map((r) => DataStore.getSessionFlagSummary(r));
+        const redCount = flagSummaries.filter((s) => s.overallStatus === 'RED').length;
+        const yellowCount = flagSummaries.filter((s) => s.overallStatus === 'YELLOW').length;
+        const greenCount = flagSummaries.filter((s) => s.overallStatus === 'GREEN').length;
+
+        const redPlayers = records
+          .filter((_, i) => flagSummaries[i].overallStatus === 'RED')
+          .map((r) => `#${r.player_number} ${r.player_name}`);
+
+        const yellowPlayers = records
+          .filter((_, i) => flagSummaries[i].overallStatus === 'YELLOW')
+          .map((r) => `#${r.player_number} ${r.player_name}`);
+
+        return (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+              <div>
+                <div className="text-[10px] font-black text-orange-500 uppercase tracking-widest">
+                  DECISION SUPPORT ENGINE
+                </div>
+                <h2 className="text-lg font-black text-white tracking-tight flex items-center space-x-2">
+                  <span>TRAFFIC-LIGHT LOAD STATUS & NEXT-SESSION GUIDANCE</span>
+                </h2>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Algorithmic evaluation for Coach Luis Aparicio Villa based on rolling individual baselines
+                </p>
+              </div>
+
+              {/* Status Badge Pills */}
+              <div className="flex items-center space-x-3 text-xs font-black">
+                <span className="flex items-center space-x-1.5 bg-emerald-950/80 border border-emerald-800 text-emerald-400 px-3 py-1.5 rounded-lg">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>{greenCount} GREEN</span>
+                </span>
+                <span className="flex items-center space-x-1.5 bg-amber-950/80 border border-amber-800 text-amber-300 px-3 py-1.5 rounded-lg">
+                  <span className="w-2 h-2 rounded-full bg-amber-400" />
+                  <span>{yellowCount} YELLOW</span>
+                </span>
+                <span className="flex items-center space-x-1.5 bg-rose-950/80 border border-rose-800 text-rose-400 px-3 py-1.5 rounded-lg">
+                  <span className="w-2 h-2 rounded-full bg-rose-500" />
+                  <span>{redCount} RED</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Next Session Guidance Card */}
+            <div className="bg-zinc-950 border-2 border-orange-500/40 rounded-xl p-4 space-y-2">
+              <div className="flex items-center space-x-2 text-xs font-extrabold text-orange-400 uppercase tracking-wider">
+                <Shield className="w-4 h-4 text-orange-500" />
+                <span>Coach Luis Guidance — Next Session Load Recommendation</span>
+              </div>
+              <p className="text-xs text-zinc-300 leading-relaxed">
+                {redCount > 0 ? (
+                  <>
+                    <strong className="text-rose-400">High Workload Exposure:</strong> {redPlayers.join(', ')} exceeded expected baseline thresholds (+30%). Consider modifying tomorrow's high-intensity contact drills and monitoring lower-limb fatigue.
+                  </>
+                ) : yellowCount > 0 ? (
+                  <>
+                    <strong className="text-amber-300">Elevated Workload:</strong> {yellowPlayers.join(', ')} logged elevated mechanical or acceleration demands (+15–30%). Maintain planned volume but monitor drill density and post-practice recovery.
+                  </>
+                ) : (
+                  <>
+                    <strong className="text-emerald-400">Normal Workload Progression:</strong> All monitored athletes performed within expected individual baseline parameters. Proceed with planned high-density tactical drills.
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Player Rankings Section */}
       <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-6 shadow-xl">

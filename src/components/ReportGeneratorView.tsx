@@ -411,7 +411,7 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
 
               <div className="bg-zinc-900 print:bg-zinc-100 border border-zinc-800 print:border-zinc-300 p-3 rounded-xl text-center">
                 <span className="text-zinc-500 print:text-zinc-700 text-[10px] block font-extrabold uppercase">ANAEROBIC TIME</span>
-                <span className="text-yellow-400 print:text-yellow-700 font-black text-base">{avgAnaerobic} s</span>
+                <span className="text-yellow-400 print:text-yellow-700 font-black text-base">{avgAnaerobic > 60 ? (avgAnaerobic / 60).toFixed(1) : avgAnaerobic} min</span>
               </div>
 
               <div className="bg-zinc-900 print:bg-zinc-100 border border-zinc-800 print:border-zinc-300 p-3 rounded-xl text-center">
@@ -541,7 +541,7 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
                       <td className="p-2 text-right font-mono font-bold text-amber-400">{formatWholeNumber(pg.dist)} m</td>
                       <td className="p-2 text-right font-mono font-bold text-orange-400">{formatWholeNumber(pg.accel)}</td>
                       <td className="p-2 text-right font-mono font-bold text-orange-300">{pg.accelMin}</td>
-                      <td className="p-2 text-right font-mono font-bold text-yellow-400">{formatWholeNumber(pg.anaerobic)}s</td>
+                      <td className="p-2 text-right font-mono font-bold text-yellow-400">{formatWholeNumber(pg.anaerobic > 60 ? pg.anaerobic / 60 : pg.anaerobic)} min</td>
                       <td className="p-2 text-right font-mono font-bold text-rose-400">{formatWholeNumber(pg.decel)}</td>
                       <td className="p-2 text-right font-mono font-bold text-rose-300">{pg.decelMin}</td>
                       <td className="p-2 text-right font-mono font-bold text-purple-400">{formatWholeNumber(pg.jump)}</td>
@@ -631,7 +631,7 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
                         </td>
                         <td className="p-2 text-right font-mono font-bold text-yellow-400">
                           {r.anaerobic_activity_time !== null && r.anaerobic_activity_time !== undefined
-                            ? `${formatWholeNumber(r.anaerobic_activity_time)}s`
+                            ? `${formatWholeNumber(r.anaerobic_activity_time > 60 ? r.anaerobic_activity_time / 60 : r.anaerobic_activity_time)} min`
                             : '-'}
                         </td>
                         <td className="p-2 text-right font-mono font-bold text-rose-400">{formatWholeNumber(r.deceleration_load)}</td>

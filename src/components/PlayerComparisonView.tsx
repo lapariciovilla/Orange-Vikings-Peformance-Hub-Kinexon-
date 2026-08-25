@@ -24,7 +24,7 @@ const METRIC_CONFIG: Record<CompareMetricKey, { label: string; unit: string; col
   distance_m: { label: 'Total Distance', unit: 'm', color: '#f59e0b' },
   accumulated_acceleration_load: { label: 'Accumulated Accel Load', unit: 'au', color: '#ea580c' },
   accumulated_acceleration_load_per_min: { label: 'Accel Load / min', unit: 'au/min', color: '#f97316' },
-  anaerobic_activity_time: { label: 'Anaerobic Activity Time', unit: 's', color: '#eab308' },
+  anaerobic_activity_time: { label: 'Anaerobic Activity Time', unit: 'min', color: '#eab308' },
   deceleration_load: { label: 'Deceleration Load', unit: 'au', color: '#f43f5e' },
   deceleration_load_per_min: { label: 'Decel Load / min', unit: 'au/min', color: '#e11d48' },
   jump_load: { label: 'Jump Load', unit: 'au', color: '#a855f7' },

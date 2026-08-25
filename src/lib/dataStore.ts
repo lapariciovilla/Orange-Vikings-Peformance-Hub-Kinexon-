@@ -444,7 +444,10 @@ export class DataStore {
       return {
         avg_distance: null,
         avg_accel: null,
+        avg_accel_per_min: null,
+        avg_anaerobic: null,
         avg_decel: null,
+        avg_decel_per_min: null,
         avg_jump: null,
         avg_mechanical: null,
         avg_rpe: null,
@@ -455,7 +458,10 @@ export class DataStore {
 
     let distSum = 0, distCount = 0;
     let accelSum = 0, accelCount = 0;
+    let accelMinSum = 0, accelMinCount = 0;
+    let anaerobicSum = 0, anaerobicCount = 0;
     let decelSum = 0, decelCount = 0;
+    let decelMinSum = 0, decelMinCount = 0;
     let jumpSum = 0, jumpCount = 0;
     let mechSum = 0, mechCount = 0;
     let rpeSum = 0, rpeCount = 0;
@@ -463,7 +469,34 @@ export class DataStore {
     records.forEach((r) => {
       if (r.distance_m !== null) { distSum += r.distance_m; distCount++; }
       if (r.accumulated_acceleration_load !== null) { accelSum += r.accumulated_acceleration_load; accelCount++; }
+      
+      const minutes = r.session_type === 'Game' && r.game_minutes && r.game_minutes > 0
+        ? r.game_minutes
+        : (r.duration_min && r.duration_min > 0 ? r.duration_min : null);
+
+      const accelPerMin = r.accumulated_acceleration_load_per_min ?? (
+        r.accumulated_acceleration_load !== null && minutes && minutes > 0
+          ? r.accumulated_acceleration_load / minutes
+          : null
+      );
+      if (accelPerMin !== null) { accelMinSum += accelPerMin; accelMinCount++; }
+
+      if (r.anaerobic_activity_time !== null && r.anaerobic_activity_time !== undefined) {
+        // Convert to minutes if stored as raw seconds (> 60)
+        const minVal = r.anaerobic_activity_time > 60 ? r.anaerobic_activity_time / 60 : r.anaerobic_activity_time;
+        anaerobicSum += minVal;
+        anaerobicCount++;
+      }
+
       if (r.deceleration_load !== null) { decelSum += r.deceleration_load; decelCount++; }
+
+      const decelPerMin = r.deceleration_load_per_min ?? (
+        r.deceleration_load !== null && minutes && minutes > 0
+          ? r.deceleration_load / minutes
+          : null
+      );
+      if (decelPerMin !== null) { decelMinSum += decelPerMin; decelMinCount++; }
+
       if (r.jump_load !== null) { jumpSum += r.jump_load; jumpCount++; }
       if (r.mechanical_load !== null) { mechSum += r.mechanical_load; mechCount++; }
       if (r.RPE !== null && r.RPE !== undefined) { rpeSum += r.RPE; rpeCount++; }
@@ -472,7 +505,10 @@ export class DataStore {
     return {
       avg_distance: distCount > 0 ? Math.round(distSum / distCount) : null,
       avg_accel: accelCount > 0 ? Number((accelSum / accelCount).toFixed(1)) : null,
+      avg_accel_per_min: accelMinCount > 0 ? Number((accelMinSum / accelMinCount).toFixed(2)) : null,
+      avg_anaerobic: anaerobicCount > 0 ? Number((anaerobicSum / anaerobicCount).toFixed(1)) : null,
       avg_decel: decelCount > 0 ? Number((decelSum / decelCount).toFixed(1)) : null,
+      avg_decel_per_min: decelMinCount > 0 ? Number((decelMinSum / decelMinCount).toFixed(2)) : null,
       avg_jump: jumpCount > 0 ? Number((jumpSum / jumpCount).toFixed(1)) : null,
       avg_mechanical: mechCount > 0 ? Number((mechSum / mechCount).toFixed(1)) : null,
       avg_rpe: rpeCount > 0 ? Number((rpeSum / rpeCount).toFixed(1)) : null,
