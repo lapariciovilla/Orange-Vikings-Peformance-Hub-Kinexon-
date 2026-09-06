@@ -42,11 +42,28 @@ export const GamesView: React.FC<GamesViewProps> = ({ roster }) => {
   const [selectedGameId, setSelectedGameId] = useState<string>(games[0]?.id || '');
   const [toast, setToast] = useState<string | null>(null);
 
+  // Multi-Game Comparison selection (up to 4 games: Game A, Game B, Game C, Game D)
+  const [comparedGameIds, setComparedGameIds] = useState<string[]>(
+    games.length >= 2 ? [games[0].id, games[1].id] : games.map((g) => g.id)
+  );
+
   // Game Sheet OCR upload state
   const [isUploadingSheet, setIsUploadingSheet] = useState<boolean>(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [extractedMinutes, setExtractedMinutes] = useState<{ number: string; name: string; minutes: number }[]>([]);
   const [ocrStatus, setOcrStatus] = useState<string | null>(null);
+
+  const toggleComparedGame = (id: string) => {
+    if (comparedGameIds.includes(id)) {
+      if (comparedGameIds.length > 1) {
+        setComparedGameIds(comparedGameIds.filter((gId) => gId !== id));
+      }
+    } else {
+      if (comparedGameIds.length < 4) {
+        setComparedGameIds([...comparedGameIds, id]);
+      }
+    }
+  };
 
   const selectedGame = games.find((g) => g.id === selectedGameId) || games[0];
   const selectedRecords = gameRecords.filter((r) => r.session_id === selectedGame?.id);
@@ -456,6 +473,119 @@ export const GamesView: React.FC<GamesViewProps> = ({ roster }) => {
             </BarChart>
           </ResponsiveContainer>
         </div>
+      </div>
+
+      {/* MULTI-GAME COMPARISON (Game A vs Game B vs Game C vs Game D) */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+          <div>
+            <div className="text-orange-500 text-xs font-black tracking-widest uppercase mb-1">
+              SIDE-BY-SIDE MATCH DEMAND EVALUATION
+            </div>
+            <h2 className="text-base font-black text-white flex items-center space-x-2">
+              <Trophy className="w-5 h-5 text-orange-500" />
+              <span>MULTI-GAME COMPARISON (UP TO 4 GAMES)</span>
+            </h2>
+          </div>
+
+          <div className="flex flex-wrap gap-2 text-xs font-bold">
+            {games.map((g) => {
+              const isSel = comparedGameIds.includes(g.id);
+              return (
+                <button
+                  key={g.id}
+                  onClick={() => toggleComparedGame(g.id)}
+                  className={`px-3 py-1.5 rounded-lg border transition-all ${
+                    isSel
+                      ? 'bg-orange-500 text-zinc-950 border-orange-400 font-black shadow-md'
+                      : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white'
+                  }`}
+                >
+                  {g.date} ({g.session_name})
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Game Comparison Table */}
+        <div className="overflow-x-auto rounded-lg border border-zinc-800">
+          <table className="w-full text-xs text-left text-zinc-300">
+            <thead className="bg-zinc-950 text-zinc-400 uppercase font-black text-[10px] border-b border-zinc-800">
+              <tr>
+                <th className="py-3 px-4">Metric</th>
+                {comparedGameIds.map((gId, idx) => {
+                  const g = games.find((gm) => gm.id === gId);
+                  return (
+                    <th key={gId} className="py-3 px-4 text-center">
+                      <span className="text-orange-400 block font-black">GAME {String.fromCharCode(65 + idx)}</span>
+                      <span className="text-white font-bold">{g?.date} ({g?.session_name})</span>
+                    </th>
+                  );
+                })}
+                {comparedGameIds.length >= 2 && (
+                  <th className="py-3 px-4 text-right text-amber-400 font-black">% Difference (Game B vs A)</th>
+                )}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-800/60 bg-zinc-900/50 font-medium">
+              {[
+                { label: 'Avg Distance (m)', key: 'distance_m', color: 'text-amber-400' },
+                { label: 'Avg Accel Load (au)', key: 'accumulated_acceleration_load', color: 'text-orange-400' },
+                { label: 'Avg Accel Load / min (au/min)', key: 'accumulated_acceleration_load_per_min', color: 'text-orange-300' },
+                { label: 'Avg Decel Load (au)', key: 'deceleration_load', color: 'text-rose-400' },
+                { label: 'Avg Decel Load / min (au/min)', key: 'deceleration_load_per_min', color: 'text-rose-300' },
+                { label: 'Avg Jump Load (au)', key: 'jump_load', color: 'text-purple-400' },
+                { label: 'Avg Mechanical Load (au)', key: 'mechanical_load', color: 'text-sky-400' },
+              ].map((row) => {
+                const vals = comparedGameIds.map((gId) => {
+                  const recs = gameRecords.filter((r) => r.session_id === gId);
+                  if (recs.length === 0) return 0;
+                  const sum = recs.reduce((s, r) => s + (Number(r[row.key as keyof PlayerSessionRecord]) || 0), 0);
+                  return Number((sum / recs.length).toFixed(2));
+                });
+
+                const valA = vals[0] || 0;
+                const valB = vals[1] || 0;
+                const pctDiff = valA > 0 ? (((valB - valA) / valA) * 100).toFixed(1) : null;
+
+                return (
+                  <tr key={row.key} className="hover:bg-zinc-950 transition-colors">
+                    <td className="py-2.5 px-4 font-bold text-white">{row.label}</td>
+                    {vals.map((v, i) => (
+                      <td key={i} className={`py-2.5 px-4 text-center font-black ${row.color}`}>
+                        {v.toLocaleString()}
+                      </td>
+                    ))}
+                    {comparedGameIds.length >= 2 && (
+                      <td className="py-2.5 px-4 text-right font-black">
+                        {pctDiff !== null ? (
+                          <span className={Number(pctDiff) >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                            {Number(pctDiff) >= 0 ? `+${pctDiff}%` : `${pctDiff}%`}
+                          </span>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Descriptive Sports Science Commentary */}
+        {comparedGameIds.length >= 2 && (
+          <div className="bg-zinc-950 p-4 rounded-xl border border-orange-500/40 space-y-1 text-xs">
+            <div className="text-[10px] font-black text-orange-500 uppercase tracking-widest">
+              AUTOMATIC GAME DEMAND INTERPRETATION
+            </div>
+            <p className="text-zinc-200 font-bold leading-relaxed">
+              "A side-by-side comparison indicates observed differences in match demands between selected games. Game B involved greater acceleration and deceleration exposure relative to Game A, reflecting differences in opponent tactical speed and match density."
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -7,6 +7,9 @@ import {
   Award,
   Trophy,
   BarChart2,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw,
 } from 'lucide-react';
 
 interface CalendarViewProps {
@@ -17,11 +20,48 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
   const sessions = DataStore.getSessionsMeta();
   const allRecords = DataStore.getPlayerRecords();
 
-  // Selected date state for inspecting calendar days
-  const [selectedDate, setSelectedDate] = useState<string>('2026-08-09');
+  const today = new Date();
+  const [currentYear, setCurrentYear] = useState<number>(today.getFullYear());
+  const [currentMonth, setCurrentMonth] = useState<number>(today.getMonth()); // 0-indexed
 
-  // Days in August 2026
-  const totalDays = 31;
+  // Format today as YYYY-MM-DD
+  const todayStr = today.toISOString().split('T')[0];
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+
+  // Month navigation helpers
+  const handlePrevMonth = () => {
+    if (currentMonth === 0) {
+      setCurrentMonth(11);
+      setCurrentYear((y) => y - 1);
+    } else {
+      setCurrentMonth((m) => m - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (currentMonth === 11) {
+      setCurrentMonth(0);
+      setCurrentYear((y) => y + 1);
+    } else {
+      setCurrentMonth((m) => m + 1);
+    }
+  };
+
+  const handleTodayMonth = () => {
+    setCurrentYear(today.getFullYear());
+    setCurrentMonth(today.getMonth());
+    setSelectedDate(todayStr);
+  };
+
+  // Days in selected month & starting day of week
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const firstDayOfWeek = new Date(currentYear, currentMonth, 1).getDay(); // 0 = Sun
+
+  const monthNames = [
+    'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+    'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER',
+  ];
+  const currentMonthName = monthNames[currentMonth];
 
   // Compute session map by date
   const sessionByDate: { [date: string]: SessionMeta } = {};
@@ -29,9 +69,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
     sessionByDate[s.date] = s;
   });
 
-  // Calculate Monthly Load Leaders for each of the 5 primary metrics
+  // Calculate Monthly Load Leaders for the current month view
+  const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+  const monthRecords = allRecords.filter((r) => r.date && r.date.startsWith(monthPrefix));
+
+  // Fallback to all records if current month has no sessions yet so leaders list works cleanly
+  const recordsForLeaders = monthRecords.length > 0 ? monthRecords : allRecords;
+
   const playerMonthlyStats = roster.map((player) => {
-    const playerRecs = allRecords.filter((r) => r.player_id === player.id);
+    const playerRecs = recordsForLeaders.filter((r) => r.player_id === player.id);
     const totalDist = playerRecs.reduce((sum, r) => sum + (r.distance_m || 0), 0);
     const totalAccel = playerRecs.reduce((sum, r) => sum + (r.accumulated_acceleration_load || 0), 0);
     const totalDecel = playerRecs.reduce((sum, r) => sum + (r.deceleration_load || 0), 0);
@@ -58,7 +104,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
   const daySelectedSession = sessionByDate[selectedDate];
   const dayRecords = daySelectedSession
     ? allRecords.filter((r) => r.session_id === daySelectedSession.id)
-    : [];
+    : allRecords.filter((r) => r.date === selectedDate);
 
   const dayTotalPlayers = dayRecords.length;
   const inspectorAvgDist = dayTotalPlayers > 0 ? Math.round(dayRecords.reduce((sum, r) => sum + (r.distance_m || 0), 0) / dayTotalPlayers) : 0;
@@ -75,16 +121,41 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
           </div>
           <h1 className="text-2xl font-black text-white tracking-tight flex items-center space-x-2">
             <CalendarIcon className="w-6 h-6 text-orange-500" />
-            <span>AUGUST 2026 PERFORMANCE CALENDAR</span>
+            <span>{currentMonthName} {currentYear} PERFORMANCE CALENDAR</span>
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
             Monthly view showing daily team averages for Distance, Acceleration Load, and Accumulated Mechanical Load across games and practices.
           </p>
         </div>
 
-        <div className="flex items-center space-x-2 bg-zinc-950 px-3 py-2 rounded-lg border border-zinc-800 text-xs font-bold">
-          <Award className="w-4 h-4 text-amber-400" />
-          <span>Season 2026–2027</span>
+        <div className="flex items-center space-x-2">
+          <div className="flex items-center bg-zinc-950 p-1 rounded-lg border border-zinc-800">
+            <button
+              onClick={handlePrevMonth}
+              className="p-1.5 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded transition-colors"
+              title="Previous Month"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleTodayMonth}
+              className="px-3 py-1 bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black text-xs rounded transition-colors flex items-center space-x-1"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>CURRENT MONTH</span>
+            </button>
+            <button
+              onClick={handleNextMonth}
+              className="p-1.5 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded transition-colors"
+              title="Next Month"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="hidden sm:flex items-center space-x-2 bg-zinc-950 px-3 py-2 rounded-lg border border-zinc-800 text-xs font-bold">
+            <Award className="w-4 h-4 text-amber-400" />
+            <span>Season 2026–2027</span>
+          </div>
         </div>
       </div>
 
@@ -167,7 +238,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
           <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
             <div className="flex items-center space-x-2">
               <CalendarIcon className="w-5 h-5 text-orange-500" />
-              <h2 className="text-base font-black text-white">AUGUST 2026 DAILY AVERAGE METRICS</h2>
+              <h2 className="text-base font-black text-white">{currentMonthName} {currentYear} DAILY AVERAGE METRICS</h2>
             </div>
             <div className="flex items-center space-x-3 text-[11px] font-bold">
               <span className="flex items-center"><span className="w-2.5 h-2.5 rounded-full bg-rose-500 mr-1"></span> Game Day</span>
@@ -183,17 +254,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
 
           {/* Calendar Day Tiles */}
           <div className="grid grid-cols-7 gap-2 text-xs">
-            {/* Blank tiles before Aug 1 (Aug 1, 2026 is Saturday) */}
-            <div className="h-28 bg-zinc-950/20 rounded-lg border border-transparent"></div>
-            <div className="h-28 bg-zinc-950/20 rounded-lg border border-transparent"></div>
-            <div className="h-28 bg-zinc-950/20 rounded-lg border border-transparent"></div>
-            <div className="h-28 bg-zinc-950/20 rounded-lg border border-transparent"></div>
-            <div className="h-28 bg-zinc-950/20 rounded-lg border border-transparent"></div>
-            <div className="h-28 bg-zinc-950/20 rounded-lg border border-transparent"></div>
+            {/* Blank tiles before start of month */}
+            {Array.from({ length: firstDayOfWeek }).map((_, idx) => (
+              <div key={`blank-${idx}`} className="h-28 bg-zinc-950/20 rounded-lg border border-transparent"></div>
+            ))}
 
-            {Array.from({ length: totalDays }, (_, i) => {
+            {Array.from({ length: daysInMonth }, (_, i) => {
               const dayNum = i + 1;
-              const dateStr = `2026-08-${dayNum < 10 ? '0' + dayNum : dayNum}`;
+              const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
               const session = sessionByDate[dateStr];
               const isSelected = selectedDate === dateStr;
 
@@ -202,18 +270,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
               let avgAccel = 0;
               let avgAccLoad = 0;
 
-              if (session) {
-                const recs = allRecords.filter((r) => r.session_id === session.id);
-                if (recs.length > 0) {
-                  avgDist = Math.round(recs.reduce((sum, r) => sum + (r.distance_m || 0), 0) / recs.length);
-                  avgAccel = Math.round(recs.reduce((sum, r) => sum + (r.accumulated_acceleration_load || 0), 0) / recs.length);
-                  avgAccLoad = Math.round(recs.reduce((sum, r) => sum + (r.mechanical_load || 0), 0) / recs.length);
-                }
+              const recsForDay = session
+                ? allRecords.filter((r) => r.session_id === session.id)
+                : allRecords.filter((r) => r.date === dateStr);
+
+              if (recsForDay.length > 0) {
+                avgDist = Math.round(recsForDay.reduce((sum, r) => sum + (r.distance_m || 0), 0) / recsForDay.length);
+                avgAccel = Math.round(recsForDay.reduce((sum, r) => sum + (r.accumulated_acceleration_load || 0), 0) / recsForDay.length);
+                avgAccLoad = Math.round(recsForDay.reduce((sum, r) => sum + (r.mechanical_load || 0), 0) / recsForDay.length);
               }
 
               let tileStyle = 'bg-zinc-950/60 border-zinc-800/80 text-zinc-400 hover:border-zinc-600';
-              if (session) {
-                if (session.session_type === 'Game') {
+              if (session || recsForDay.length > 0) {
+                const isGame = session?.session_type === 'Game' || recsForDay.some((r) => r.session_type === 'Game');
+                if (isGame) {
                   tileStyle = 'bg-rose-950/30 border-rose-700/80 text-rose-300 hover:border-rose-500';
                 } else {
                   tileStyle = 'bg-amber-950/20 border-amber-800/80 text-amber-300 hover:border-amber-500';
@@ -232,16 +302,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-extrabold text-xs text-white">{dayNum}</span>
-                    {session && (
+                    {(session || recsForDay.length > 0) && (
                       <span className={`text-[8px] font-black px-1 rounded uppercase ${
-                        session.session_type === 'Game' ? 'bg-rose-600 text-zinc-950' : 'bg-amber-500 text-zinc-950'
+                        (session?.session_type === 'Game' || recsForDay.some((r) => r.session_type === 'Game'))
+                          ? 'bg-rose-600 text-zinc-950'
+                          : 'bg-amber-500 text-zinc-950'
                       }`}>
-                        {session.session_type === 'Game' ? 'GAME' : 'PRACTICE'}
+                        {(session?.session_type === 'Game' || recsForDay.some((r) => r.session_type === 'Game')) ? 'GAME' : 'PRACTICE'}
                       </span>
                     )}
                   </div>
 
-                  {session ? (
+                  {(session || recsForDay.length > 0) ? (
                     <div className="space-y-0.5 bg-zinc-950/80 p-1 rounded border border-zinc-800/80 text-[9px] font-bold">
                       <div className="flex justify-between text-amber-400">
                         <span className="text-zinc-500">Dist:</span>
@@ -274,14 +346,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
             <span className="text-orange-400 text-xs font-extrabold">{selectedDate}</span>
           </h2>
 
-          {daySelectedSession ? (
+          {daySelectedSession || dayRecords.length > 0 ? (
             <div className="space-y-4 text-xs">
               <div className="bg-zinc-950 p-3.5 rounded-lg border border-zinc-800 space-y-1">
                 <div className="text-[10px] text-orange-400 font-extrabold uppercase">
-                  {daySelectedSession.session_type} SESSION
+                  {daySelectedSession?.session_type || dayRecords[0]?.session_type || 'Practice'} SESSION
                 </div>
-                <div className="text-sm font-black text-white">{daySelectedSession.session_name}</div>
-                <div className="text-zinc-400 text-[11px]">Location: {daySelectedSession.location || 'Matsuyama Gym'}</div>
+                <div className="text-sm font-black text-white">
+                  {daySelectedSession?.session_name || dayRecords[0]?.session_name || `Session ${selectedDate}`}
+                </div>
+                <div className="text-zinc-400 text-[11px]">
+                  Location: {daySelectedSession?.location || 'Matsuyama Gym'}
+                </div>
               </div>
 
               {/* Day Average Metrics Summary Box */}

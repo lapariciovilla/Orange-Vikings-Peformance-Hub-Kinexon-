@@ -57,9 +57,13 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
   const [colMech, setColMech] = useState<string>('');
 
   // Session Metadata for import
-  const [importDate, setImportDate] = useState<string>('2026-08-11');
-  const [sessionType, setSessionType] = useState<SessionType>('Preseason Practice');
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [importDate, setImportDate] = useState<string>(todayStr);
+  const [sessionType, setSessionType] = useState<SessionType>('Practice');
   const [sessionName, setSessionName] = useState<string>('KINEXON Monitored Practice');
+
+  // Multi-CSV file tracking
+  const [loadedFiles, setLoadedFiles] = useState<{ name: string; content: string }[]>([]);
 
   // Preview Matched Rows
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
@@ -67,23 +71,50 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
 
   // Load sample Kinexon CSV
   const handleLoadSampleCSV = () => {
-    setFileName('Sample_Kinexon_Preseason_Aug11.csv');
+    const sampleName = 'Sample_Kinexon_Preseason.csv';
+    setFileName(sampleName);
+    setLoadedFiles([{ name: sampleName, content: SAMPLE_KINEXON_CSV_CONTENT }]);
     setCsvText(SAMPLE_KINEXON_CSV_CONTENT);
-    parseCSVContent(SAMPLE_KINEXON_CSV_CONTENT);
+    parseCSVContent(SAMPLE_KINEXON_CSV_CONTENT, sampleName);
   };
 
-  // Handle file drop/upload
+  // Handle multi-file drop/upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const content = evt.target?.result as string;
-      setCsvText(content);
-      parseCSVContent(content);
-    };
-    reader.readAsText(file);
+    const files = Array.from(e.target.files || []) as File[];
+    if (files.length === 0) return;
+
+    if (files.length === 1) {
+      const file = files[0];
+      setFileName(file.name);
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const content = evt.target?.result as string;
+        setCsvText(content);
+        setLoadedFiles([{ name: file.name, content }]);
+        parseCSVContent(content, file.name);
+      };
+      reader.readAsText(file);
+    } else {
+      // Multiple CSV files selected
+      setFileName(`${files.length} CSV Files Selected`);
+      const filePromises = files.map((f: File) => {
+        return new Promise<{ name: string; content: string }>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            resolve({ name: f.name, content: (evt.target?.result as string) || '' });
+          };
+          reader.readAsText(f);
+        });
+      });
+
+      Promise.all(filePromises).then((fileDataArr) => {
+        setLoadedFiles(fileDataArr);
+        // Combine all CSV texts into a single working content for parsing
+        const combinedContent = fileDataArr.map((fd) => fd.content).join('\n');
+        setCsvText(combinedContent);
+        parseCSVContent(combinedContent, `${files.length} CSV Reports`);
+      });
+    }
   };
 
   const parseCSVContent = (content: string, name?: string) => {
@@ -317,10 +348,11 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
 
             <div className="flex flex-wrap items-center justify-center gap-4">
               <label className="bg-orange-600 hover:bg-orange-500 text-zinc-950 font-extrabold px-5 py-2.5 rounded-lg text-xs cursor-pointer shadow-lg transition-colors">
-                <span>BROWSE FILE</span>
+                <span>BROWSE CSV FILES (MULTIPLE SUPPORTED)</span>
                 <input
                   type="file"
                   accept=".csv"
+                  multiple
                   onChange={handleFileUpload}
                   className="hidden"
                 />
@@ -644,7 +676,57 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
             </div>
           </div>
 
-          {/* Table */}
+          {/* Complete Import Validation Summary Card */}
+          <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <div className="flex items-center space-x-2">
+                <FileText className="w-4 h-4 text-orange-500" />
+                <span className="text-xs font-black text-white uppercase tracking-wider">IMPORT VALIDATION AUDIT</span>
+              </div>
+              <span className="text-[10px] font-extrabold text-orange-400 uppercase">PRE-FLIGHT CHECKLIST</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 text-center text-xs">
+              <div className="bg-zinc-900 p-2 rounded border border-zinc-800">
+                <span className="text-zinc-500 text-[9px] block font-extrabold uppercase">Rows Detected</span>
+                <span className="text-white font-black text-sm">{parsedRows.length}</span>
+              </div>
+              <div className="bg-zinc-900 p-2 rounded border border-zinc-800">
+                <span className="text-zinc-500 text-[9px] block font-extrabold uppercase">Valid Import Rows</span>
+                <span className="text-emerald-400 font-black text-sm">{parsedRows.filter((r) => r.matchedPlayer !== null).length}</span>
+              </div>
+              <div className="bg-zinc-900 p-2 rounded border border-zinc-800">
+                <span className="text-zinc-500 text-[9px] block font-extrabold uppercase">Players Detected</span>
+                <span className="text-amber-400 font-black text-sm">
+                  {new Set(parsedRows.filter((r) => r.matchedPlayer).map((r) => r.matchedPlayer!.id)).size}
+                </span>
+              </div>
+              <div className="bg-zinc-900 p-2 rounded border border-zinc-800">
+                <span className="text-zinc-500 text-[9px] block font-extrabold uppercase">Sessions Detected</span>
+                <span className="text-orange-400 font-black text-sm">{loadedFiles.length || 1}</span>
+              </div>
+              <div className="bg-zinc-900 p-2 rounded border border-zinc-800">
+                <span className="text-zinc-500 text-[9px] block font-extrabold uppercase">Session Type</span>
+                <span className="text-sky-400 font-black text-xs uppercase truncate block">{sessionType}</span>
+              </div>
+              <div className="bg-zinc-900 p-2 rounded border border-zinc-800">
+                <span className="text-zinc-500 text-[9px] block font-extrabold uppercase">Duplicates Detected</span>
+                <span className="text-purple-400 font-black text-sm">
+                  {parsedRows.length - new Set(parsedRows.map((r) => r.playerIdentifier)).size}
+                </span>
+              </div>
+              <div className="bg-zinc-900 p-2 rounded border border-zinc-800">
+                <span className="text-zinc-500 text-[9px] block font-extrabold uppercase">Missing Values</span>
+                <span className="text-amber-400 font-black text-sm">
+                  {parsedRows.filter((r) => r.distance === null || r.accelLoad === null).length}
+                </span>
+              </div>
+              <div className="bg-zinc-900 p-2 rounded border border-zinc-800">
+                <span className="text-zinc-500 text-[9px] block font-extrabold uppercase">Unmatched Players</span>
+                <span className="text-rose-400 font-black text-sm">{parsedRows.filter((r) => r.matchedPlayer === null).length}</span>
+              </div>
+            </div>
+          </div>
           <div className="overflow-x-auto rounded-lg border border-zinc-800">
             <table className="w-full text-left text-xs text-zinc-300">
               <thead className="bg-zinc-950 text-zinc-400 font-black uppercase text-[10px] tracking-wider border-b border-zinc-800">

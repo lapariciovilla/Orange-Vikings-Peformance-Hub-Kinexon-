@@ -3,10 +3,21 @@ import { Player, CoreMetrics, PlayerSessionRecord } from '../types';
 import { DataStore } from '../lib/dataStore';
 import { formatWholeNumber } from '../lib/positionalUtils';
 import {
+  calcStatsSummary,
+  calcPearsonR,
+  calcSpearmanRho,
+  calcLinearRegression,
+  calcEWMA,
+  STAT_TOOLTIPS,
+  calcZScore,
+  calcPercentileRank,
+} from '../lib/stats';
+import {
   ResponsiveContainer,
   ComposedChart,
   ScatterChart,
   Scatter,
+  BarChart,
   Bar,
   Line,
   XAxis,
@@ -23,6 +34,9 @@ import {
   HelpCircle,
   TrendingUp,
   BarChart2,
+  Sliders,
+  Sparkles,
+  Layers,
 } from 'lucide-react';
 
 interface PlayerProfileViewProps {
@@ -91,6 +105,7 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
   const [sessionFilter, setSessionFilter] = useState<SessionFilter>('ALL');
   const [activeMetricTab, setActiveMetricTab] = useState<keyof CoreMetrics>('distance_m');
   const [normMode, setNormMode] = useState<NormalizationMode>('TOTAL');
+  const [lambda, setLambda] = useState<number>(0.2); // EWMA smoothing factor
 
   const player = players.find((p) => p.id === selectedPlayerId) || players[0];
   const allRecords = DataStore.getRecordsForPlayer(player?.id || '');
@@ -187,18 +202,31 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
       rawMech: d.rawMech,
     }));
 
-  // Pearson Correlation Analysis
+  // Correlation & Regression Analysis via stats.ts
   const correlationPairs = chartData.filter((d) => d.rpe !== null && d.extVal !== null);
   const xVals = correlationPairs.map((d) => d.extVal);
   const yVals = correlationPairs.map((d) => d.rpe!);
-  const pearsonR = calculatePearsonR(xVals, yVals);
+
+  const pearsonRes = calcPearsonR(xVals, yVals);
+  const spearmanRho = calcSpearmanRho(xVals, yVals);
+  const regRes = calcLinearRegression(xVals, yVals);
+
+  // EWMA Smoothed Values for Charting
+  const ewmaVals = calcEWMA(
+    chartData.map((d) => d.extVal),
+    lambda
+  );
+  const chartDataWithEWMA = chartData.map((d, i) => ({
+    ...d,
+    ewma: ewmaVals[i] || d.extVal,
+  }));
 
   let corrDirection = 'Weak / Insignificant relationship';
-  if (pearsonR !== null) {
-    if (pearsonR >= 0.7) corrDirection = 'Strong positive relationship (Higher load → Higher RPE)';
-    else if (pearsonR >= 0.3) corrDirection = 'Moderate positive relationship';
-    else if (pearsonR <= -0.7) corrDirection = 'Strong inverse relationship (Higher load → Lower RPE)';
-    else if (pearsonR <= -0.3) corrDirection = 'Moderate inverse relationship';
+  if (pearsonRes.r !== null) {
+    if (pearsonRes.r >= 0.7) corrDirection = 'Strong positive relationship (Higher load → Higher RPE)';
+    else if (pearsonRes.r >= 0.3) corrDirection = 'Moderate positive relationship';
+    else if (pearsonRes.r <= -0.7) corrDirection = 'Strong inverse relationship (Higher load → Lower RPE)';
+    else if (pearsonRes.r <= -0.3) corrDirection = 'Moderate inverse relationship';
   }
 
   // Individual Response Analysis (Observations)
@@ -219,10 +247,27 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
     }
   }
 
-  // Baseline Statistics (Mean, Median, StdDev, Range, Percentile)
+  // Full Baseline Statistics via stats.ts
   const baselineValues = filteredRecords
     .map((r) => getMetricValue(r, activeMetricTab, normMode))
     .filter((v): v is number => v !== null && v !== undefined);
+
+  const statsSummary = calcStatsSummary(baselineValues);
+
+  // Load Composition Ratios
+  const latestRec = filteredRecords[0];
+  const accelToMechRatio =
+    latestRec && latestRec.mechanical_load && latestRec.mechanical_load > 0
+      ? Number(((latestRec.accumulated_acceleration_load || 0) / latestRec.mechanical_load).toFixed(2))
+      : null;
+  const decelToMechRatio =
+    latestRec && latestRec.mechanical_load && latestRec.mechanical_load > 0
+      ? Number(((latestRec.deceleration_load || 0) / latestRec.mechanical_load).toFixed(2))
+      : null;
+  const jumpToMechRatio =
+    latestRec && latestRec.mechanical_load && latestRec.mechanical_load > 0
+      ? Number(((latestRec.jump_load || 0) / latestRec.mechanical_load).toFixed(2))
+      : null;
 
   const sampleSize = baselineValues.length;
   const meanVal = sampleSize > 0 ? baselineValues.reduce((a, b) => a + b, 0) / sampleSize : null;
@@ -633,27 +678,49 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
                 </p>
               </div>
 
-              {/* Correlation Summary Box */}
+              {/* Correlation & Regression Summary Box */}
               <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 space-y-2 text-xs">
                 <div className="text-[10px] font-black text-purple-400 uppercase tracking-wider flex items-center justify-between">
-                  <span>RPE VS {activeMetricMeta.name.toUpperCase()} CORRELATION</span>
-                  <HelpCircle className="w-3.5 h-3.5" />
+                  <span>RPE VS {activeMetricMeta.name.toUpperCase()} REGRESSION & CORRELATION</span>
+                  <HelpCircle className="w-3.5 h-3.5" title={STAT_TOOLTIPS.pearsonR} />
                 </div>
 
-                {pearsonR === null ? (
+                {pearsonRes.r === null ? (
                   <div className="text-zinc-500 text-xs font-semibold italic">
                     Insufficient historical data for reliable correlation analysis.
                   </div>
                 ) : (
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <div className="flex justify-between">
                       <span className="text-zinc-400">Sample Size (N):</span>
                       <strong className="text-white">{xVals.length} sessions</strong>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-zinc-400">Pearson r:</span>
-                      <strong className="text-purple-400 font-mono text-sm">{pearsonR}</strong>
+                      <strong className="text-purple-400 font-mono text-xs">{pearsonRes.r}</strong>
                     </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">Spearman rho:</span>
+                      <strong className="text-sky-400 font-mono text-xs">{spearmanRho ?? 'N/A'}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">Coeff of Determination (R²):</span>
+                      <strong className="text-amber-400 font-mono text-xs">{pearsonRes.r2 ?? 'N/A'}</strong>
+                    </div>
+                    {pearsonRes.ciLower !== null && pearsonRes.ciUpper !== null && (
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">95% Confidence Interval:</span>
+                        <strong className="text-emerald-400 font-mono text-xs">[{pearsonRes.ciLower}, {pearsonRes.ciUpper}]</strong>
+                      </div>
+                    )}
+                    {regRes.slope !== null && regRes.intercept !== null && (
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Linear Model:</span>
+                        <strong className="text-orange-400 font-mono text-[10px]">
+                          RPE = {regRes.slope} × Load + {regRes.intercept}
+                        </strong>
+                      </div>
+                    )}
                     <div className="text-[11px] text-zinc-300 font-semibold pt-1 border-t border-zinc-800">
                       {corrDirection}
                     </div>
@@ -669,10 +736,47 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
         </div>
       </div>
 
+      {/* LOAD COMPOSITION RATIOS CARD */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl space-y-4">
+        <div className="flex items-center space-x-2 border-b border-zinc-800 pb-3">
+          <Layers className="w-5 h-5 text-orange-500" />
+          <h2 className="text-base font-black text-white tracking-tight uppercase">
+            LOAD COMPOSITION
+          </h2>
+          <span className="text-xs text-zinc-400 font-bold ml-auto">Latest Monitored Session</span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+            <span className="text-[10px] text-zinc-500 font-extrabold uppercase block">ACCELERATION / MECHANICAL LOAD</span>
+            <div className="text-2xl font-black text-orange-400 mt-1">
+              {accelToMechRatio !== null ? accelToMechRatio : 'N/A'}
+            </div>
+            <div className="text-[10px] text-zinc-400 mt-1">Accumulated Accel Load relative to Mechanical Load</div>
+          </div>
+
+          <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+            <span className="text-[10px] text-zinc-500 font-extrabold uppercase block">DECELERATION / MECHANICAL LOAD</span>
+            <div className="text-2xl font-black text-rose-400 mt-1">
+              {decelToMechRatio !== null ? decelToMechRatio : 'N/A'}
+            </div>
+            <div className="text-[10px] text-zinc-400 mt-1">Deceleration Load relative to Mechanical Load</div>
+          </div>
+
+          <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+            <span className="text-[10px] text-zinc-500 font-extrabold uppercase block">JUMP / MECHANICAL LOAD</span>
+            <div className="text-2xl font-black text-purple-400 mt-1">
+              {jumpToMechRatio !== null ? jumpToMechRatio : 'N/A'}
+            </div>
+            <div className="text-[10px] text-zinc-400 mt-1">Jump Load relative to Mechanical Load</div>
+          </div>
+        </div>
+      </div>
+
       {/* SECTION 5: INDIVIDUAL BASELINE & PERCENTILE STATISTICS */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl space-y-4">
         <h2 className="text-base font-black text-white tracking-tight uppercase border-b border-zinc-800 pb-3">
-          INDIVIDUAL BASELINE & LONGITUDINAL PROFILE
+          INDIVIDUAL BASELINE & LONGITUDINAL PROFILE STATISTICS
         </h2>
 
         {sampleSize < 3 ? (
@@ -684,46 +788,51 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-xs">
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800">
-              <span className="text-[10px] text-zinc-500 font-extrabold uppercase block">SAMPLE SIZE</span>
-              <span className="text-lg font-black text-white mt-1 block">{sampleSize} Sessions</span>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 text-xs">
+            <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+              <span className="text-[10px] text-zinc-500 font-extrabold uppercase block">SAMPLE SIZE (N)</span>
+              <span className="text-base font-black text-white mt-1 block">{statsSummary.n} Sessions</span>
             </div>
 
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800">
-              <span className="text-[10px] text-zinc-500 font-extrabold uppercase block">LONG-TERM MEAN</span>
-              <span className="text-lg font-black text-amber-400 mt-1 block">
-                {meanVal !== null ? formatWholeNumber(meanVal) : 'N/A'}
+            <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+              <span className="text-[10px] text-zinc-500 font-extrabold uppercase block">MEAN</span>
+              <span className="text-base font-black text-amber-400 mt-1 block">
+                {statsSummary.mean !== null ? formatWholeNumber(statsSummary.mean) : 'N/A'}
               </span>
             </div>
 
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800">
-              <span className="text-[10px] text-zinc-500 font-extrabold uppercase block">MEDIAN VALUE</span>
-              <span className="text-lg font-black text-orange-400 mt-1 block">
-                {medianVal !== null ? formatWholeNumber(medianVal) : 'N/A'}
+            <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+              <span className="text-[10px] text-zinc-500 font-extrabold uppercase block" title={STAT_TOOLTIPS.median}>MEDIAN (P50)</span>
+              <span className="text-base font-black text-orange-400 mt-1 block">
+                {statsSummary.median !== null ? formatWholeNumber(statsSummary.median) : 'N/A'}
               </span>
             </div>
 
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800">
-              <span className="text-[10px] text-zinc-500 font-extrabold uppercase block">STD DEVIATION</span>
-              <span className="text-lg font-black text-sky-400 mt-1 block">
-                {stdDev !== null ? `±${formatWholeNumber(stdDev)}` : 'N/A'}
+            <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+              <span className="text-[10px] text-zinc-500 font-extrabold uppercase block" title={STAT_TOOLTIPS.sd}>STD DEV (SD)</span>
+              <span className="text-base font-black text-sky-400 mt-1 block">
+                {statsSummary.sd !== null ? `±${formatWholeNumber(statsSummary.sd)}` : 'N/A'}
               </span>
             </div>
 
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800">
-              <span className="text-[10px] text-zinc-500 font-extrabold uppercase block">TYPICAL RANGE (±1 SD)</span>
-              <span className="text-xs font-black text-emerald-400 mt-1 block font-mono">
-                {meanVal !== null && stdDev !== null
-                  ? `${formatWholeNumber(Math.max(0, meanVal - stdDev))} – ${formatWholeNumber(meanVal + stdDev)}`
-                  : 'N/A'}
+            <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+              <span className="text-[10px] text-zinc-500 font-extrabold uppercase block" title={STAT_TOOLTIPS.cv}>VARIABILITY (CV%)</span>
+              <span className="text-base font-black text-emerald-400 mt-1 block">
+                {statsSummary.cvPct !== null ? `${statsSummary.cvPct}%` : 'N/A'}
               </span>
             </div>
 
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800">
-              <span className="text-[10px] text-zinc-500 font-extrabold uppercase block">PERCENTILE RANK</span>
-              <span className="text-lg font-black text-purple-400 mt-1 block">
-                {percentileRank !== null ? `${percentileRank}th %ile` : 'N/A'}
+            <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+              <span className="text-[10px] text-zinc-500 font-extrabold uppercase block" title={STAT_TOOLTIPS.iqr}>IQR (P75-P25)</span>
+              <span className="text-base font-black text-purple-400 mt-1 block">
+                {statsSummary.iqr !== null ? formatWholeNumber(statsSummary.iqr) : 'N/A'}
+              </span>
+            </div>
+
+            <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+              <span className="text-[10px] text-zinc-500 font-extrabold uppercase block">P90 VALUE</span>
+              <span className="text-base font-black text-rose-400 mt-1 block">
+                {statsSummary.p90 !== null ? formatWholeNumber(statsSummary.p90) : 'N/A'}
               </span>
             </div>
           </div>
