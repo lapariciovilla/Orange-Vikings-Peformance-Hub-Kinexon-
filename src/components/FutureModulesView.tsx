@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Player, RPEEntry } from '../types';
 import { DataStore } from '../lib/dataStore';
+import { isGameSession, getSessionTypeBadgeClasses } from '../lib/contextBaseline';
 import {
   Activity,
   Plus,
@@ -22,8 +23,7 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
-  LineChart,
-  Line,
+  Cell,
 } from 'recharts';
 
 interface FutureModulesViewProps {
@@ -103,6 +103,8 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
     return true;
   }).sort((a, b) => b.date.localeCompare(a.date));
 
+  const allSessionsMeta = DataStore.getSessionsMeta();
+
   // Compute Team Average RPE per Date for Graphic
   const dateGroups: { [date: string]: number[] } = {};
   allEntries.forEach((e) => {
@@ -115,10 +117,15 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
     .map((d) => {
       const scores = dateGroups[d];
       const avg = Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1));
+      const sMeta = allSessionsMeta.find((s) => s.date === d);
+      const isGame = isGameSession(sMeta?.session_type, sMeta?.session_name);
       return {
         date: d,
         'Team Avg RPE': avg,
         entriesCount: scores.length,
+        isGame,
+        sessionType: sMeta?.session_type || (isGame ? 'Game' : 'Practice'),
+        sessionName: sMeta?.session_name || (isGame ? 'Game Session' : 'Practice Session'),
       };
     });
 
@@ -158,12 +165,22 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
 
       {/* Team Average RPE Graphic */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl space-y-4">
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+        <div className="flex flex-wrap items-center justify-between border-b border-zinc-800 pb-3 gap-2">
           <div className="flex items-center space-x-2">
             <TrendingUp className="w-5 h-5 text-orange-500" />
             <h2 className="text-base font-black text-white">TEAM AVERAGE RPE TREND GRAPHIC</h2>
           </div>
-          <span className="text-xs text-zinc-400 font-bold">Borg CR10 Scale (1–10)</span>
+          
+          <div className="flex items-center space-x-4 text-xs font-bold">
+            <div className="flex items-center space-x-1.5">
+              <span className="w-3 h-3 rounded-full bg-orange-500 inline-block"></span>
+              <span className="text-zinc-300">Practice RPE</span>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <span className="w-3 h-3 rounded-full bg-purple-500 inline-block"></span>
+              <span className="text-purple-300 font-extrabold">Game RPE</span>
+            </div>
+          </div>
         </div>
 
         <div className="h-64 w-full">
@@ -178,15 +195,34 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
                 <XAxis dataKey="date" stroke="#a1a1aa" fontSize={11} tick={{ fill: '#d4d4d8' }} />
                 <YAxis domain={[0, 10]} stroke="#a1a1aa" fontSize={11} />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#09090b',
-                    borderColor: '#27272a',
-                    borderRadius: '8px',
-                    color: '#fff',
-                    fontSize: '12px',
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div className="bg-zinc-950 border border-zinc-800 p-2.5 rounded-lg shadow-xl text-xs space-y-1">
+                          <div className="font-extrabold text-white flex items-center justify-between gap-3">
+                            <span>{label}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase ${
+                              data.isGame ? 'bg-purple-950 text-purple-300 border border-purple-800' : 'bg-orange-950 text-orange-400 border border-orange-800'
+                            }`}>
+                              {data.sessionType}
+                            </span>
+                          </div>
+                          <div className="text-zinc-400 font-medium">{data.sessionName}</div>
+                          <div className="text-amber-400 font-bold pt-1 border-t border-zinc-800">
+                            Team Avg RPE: {data['Team Avg RPE']} / 10
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
                   }}
                 />
-                <Bar dataKey="Team Avg RPE" fill="#f97316" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Team Avg RPE" radius={[6, 6, 0, 0]}>
+                  {teamRPEChartData.map((entry, idx) => (
+                    <Cell key={`bar-cell-${idx}`} fill={entry.isGame ? '#a855f7' : '#f97316'} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -326,6 +362,7 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
                   <tr>
                     <th className="p-3">Athlete</th>
                     <th className="p-3">Date</th>
+                    <th className="p-3">Session Context</th>
                     <th className="p-3">RPE Score</th>
                     <th className="p-3">Category</th>
                     <th className="p-3">Notes</th>
@@ -337,6 +374,8 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
                     const isEditing = editingId === e.id;
                     const p = roster.find((pl) => pl.id === e.player_id);
                     const tag = getRPELabel(e.rpe_score);
+                    const sMeta = allSessionsMeta.find((s) => s.date === e.date || s.id === e.session_id);
+                    const isGame = isGameSession(sMeta?.session_type, sMeta?.session_name);
 
                     return (
                       <tr key={e.id} className="hover:bg-zinc-800/50 transition-colors">
@@ -355,6 +394,7 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
                                 className="bg-zinc-950 border border-orange-500 rounded px-2 py-1 text-xs text-white"
                               />
                             </td>
+                            <td className="p-2 text-zinc-500">—</td>
                             <td className="p-2">
                               <input
                                 type="number"
@@ -400,6 +440,13 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
                         ) : (
                           <>
                             <td className="p-3 text-zinc-400 font-medium">{e.date}</td>
+                            <td className="p-3">
+                              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border ${
+                                isGame ? 'bg-purple-950/80 border-purple-800 text-purple-300' : 'bg-orange-950/80 border-orange-800 text-orange-400'
+                              }`}>
+                                {isGame ? 'GAME' : (sMeta?.session_type?.toUpperCase() || 'PRACTICE')}
+                              </span>
+                            </td>
                             <td className="p-3">
                               <span className="font-black text-white text-sm bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
                                 {e.rpe_score} / 10

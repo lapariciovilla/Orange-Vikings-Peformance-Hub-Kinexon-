@@ -116,8 +116,21 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
   const [normMode, setNormMode] = useState<NormalizationMode>('TOTAL');
   const [lambda, setLambda] = useState<number>(0.2); // EWMA smoothing factor
 
-  const player = players.find((p) => p.id === selectedPlayerId) || players[0];
-  const allRecords = DataStore.getRecordsForPlayer(player?.id || '');
+  const player = (players && players.length > 0)
+    ? (players.find((p) => p.id === selectedPlayerId) || players[0])
+    : null;
+
+  if (!player) {
+    return (
+      <div className="p-8 max-w-7xl mx-auto text-center text-zinc-400 bg-zinc-900 border border-zinc-800 rounded-xl my-8">
+        <AlertCircle className="w-8 h-8 text-orange-500 mx-auto mb-2" />
+        <h3 className="font-bold text-white text-base">Player Profile Unavailable</h3>
+        <p className="text-xs text-zinc-400 mt-1">No players available in current roster or dataset.</p>
+      </div>
+    );
+  }
+
+  const allRecords = DataStore.getRecordsForPlayer(player.id);
 
   // Filter records based on count
   const filteredRecords = allRecords.slice(
@@ -738,7 +751,12 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
                       );
                     }}
                   />
-                  <Scatter name="Sessions" data={scatterData} fill="#f97316" radius={6} />
+                  <Scatter name="Sessions" data={scatterData} radius={6}>
+                    {scatterData.map((entry, index) => {
+                      const isGame = isGameSession(entry.session_type);
+                      return <Cell key={`scatter-cell-${index}`} fill={isGame ? '#a855f7' : '#f97316'} />;
+                    })}
+                  </Scatter>
                 </ScatterChart>
               </ResponsiveContainer>
             )}
@@ -961,9 +979,7 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
                   <tr key={`${r.session_id}-${r.player_id}`} className="hover:bg-zinc-800/40 transition-colors">
                     <td className="p-2.5 font-bold text-white">{r.date}</td>
                     <td className="p-2.5">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
-                        isGame ? 'bg-rose-950/80 border-rose-800 text-rose-400' : 'bg-zinc-950 border-zinc-800 text-orange-400'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${getSessionTypeBadgeClasses(r.session_type, r.session_name)}`}>
                         {r.session_type}
                       </span>
                     </td>

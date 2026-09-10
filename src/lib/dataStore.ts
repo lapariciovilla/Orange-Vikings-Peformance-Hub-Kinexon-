@@ -34,7 +34,13 @@ function getStored<T>(key: string, fallback: T): T {
   try {
     const item = localStorage.getItem(key);
     if (item) {
-      return JSON.parse(item);
+      const parsed = JSON.parse(item);
+      // If stored array is empty but fallback array has initial seed items, seed with fallback
+      if (Array.isArray(parsed) && parsed.length === 0 && Array.isArray(fallback) && fallback.length > 0) {
+        setStored(key, fallback);
+        return fallback;
+      }
+      return parsed;
     }
     // Check fallback for v1 if key ends with _v2 (non-destructive preservation)
     if (key.endsWith('_v2')) {
@@ -42,9 +48,10 @@ function getStored<T>(key: string, fallback: T): T {
       const v1Item = localStorage.getItem(v1Key);
       if (v1Item) {
         const parsed = JSON.parse(v1Item);
-        // Persist forward to _v2
-        localStorage.setItem(key, v1Item);
-        return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          localStorage.setItem(key, v1Item);
+          return parsed as T;
+        }
       }
     }
   } catch (err) {
