@@ -71,7 +71,14 @@ export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ play
 
   const compareData = useMemo(() => {
     return selectedPlayerIds.map((pId) => {
-      const p = players.find((pl) => pl.id === pId)!;
+      const p = players.find((pl) => pl.id === pId) || {
+        id: pId,
+        displayName: 'Unknown Player',
+        number: '?',
+        position: 'G/F',
+        status: 'Active' as const,
+        aliases: [],
+      };
       const rec = sessionRecords.find((r) => r.player_id === pId);
 
       const minutes = isGame && rec?.game_minutes && rec.game_minutes > 0

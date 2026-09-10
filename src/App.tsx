@@ -12,6 +12,7 @@ import { TeamAnalyticsView } from './components/TeamAnalyticsView';
 import { PlayerComparisonView } from './components/PlayerComparisonView';
 import { FutureModulesView } from './components/FutureModulesView';
 import { SettingsView } from './components/SettingsView';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 import { DataStore } from './lib/dataStore';
 import { Player, SessionMeta, PlayerSessionRecord } from './types';
@@ -83,64 +84,77 @@ export default function App() {
         />
 
         <main className="flex-1 pb-12">
-          {activeTab === 'dashboard' && (
-            <DashboardView
-              sessionMeta={sessionMetaForDate}
-              records={recordsForDate}
-              allSessions={sessions}
-              onSelectPlayer={(pId) => {
-                setSelectedPlayerId(pId);
-                setActiveTab('players');
-              }}
-              onNavigateImport={() => setActiveTab('import')}
-            />
-          )}
+          <ErrorBoundary
+            fallbackTitle="Unable to render selected view"
+            fallbackDescription="An unexpected error occurred in this section of the application."
+            onReset={refreshData}
+          >
+            {activeTab === 'dashboard' && (
+              <DashboardView
+                sessionMeta={sessionMetaForDate}
+                records={recordsForDate}
+                allSessions={sessions}
+                onSelectPlayer={(pId) => {
+                  setSelectedPlayerId(pId);
+                  setActiveTab('players');
+                }}
+                onNavigateImport={() => setActiveTab('import')}
+              />
+            )}
 
-          {activeTab === 'import' && (
-            <CSVImportView
-              roster={roster}
-              onImportComplete={(sessionId) => {
-                refreshData();
-                setActiveTab('dashboard');
-              }}
-            />
-          )}
+            {activeTab === 'import' && (
+              <CSVImportView
+                roster={roster}
+                onImportComplete={(sessionId) => {
+                  refreshData();
+                  setActiveTab('dashboard');
+                }}
+              />
+            )}
 
-          {activeTab === 'games' && <GamesView roster={roster} />}
+            {activeTab === 'games' && <GamesView roster={roster} />}
 
-          {activeTab === 'calendar' && <CalendarView roster={roster} />}
+            {activeTab === 'calendar' && <CalendarView roster={roster} />}
 
-          {activeTab === 'reports' && <ReportGeneratorView roster={roster} />}
+            {activeTab === 'reports' && <ReportGeneratorView roster={roster} />}
 
-          {activeTab === 'sessions' && (
-            <SessionHistoryView
-              sessions={sessions}
-              roster={roster}
-              onSelectSession={(sId) => {
-                const s = sessions.find((item) => item.id === sId);
-                if (s) setCurrentDate(s.date);
-              }}
-              onRefresh={refreshData}
-            />
-          )}
+            {activeTab === 'sessions' && (
+              <SessionHistoryView
+                sessions={sessions}
+                roster={roster}
+                onSelectSession={(sId) => {
+                  const s = sessions.find((item) => item.id === sId);
+                  if (s) setCurrentDate(s.date);
+                }}
+                onRefresh={refreshData}
+              />
+            )}
 
-          {activeTab === 'players' && (
-            <PlayerProfileView
-              players={roster}
-              selectedPlayerId={selectedPlayerId}
-              onSelectPlayer={setSelectedPlayerId}
-            />
-          )}
+            {activeTab === 'players' && (
+              <ErrorBoundary
+                fallbackTitle="Unable to load this player profile"
+                fallbackDescription="An unexpected error occurred while processing this player's metrics."
+                onBackToProfiles={() => setSelectedPlayerId(roster[0]?.id || '')}
+                onReset={refreshData}
+              >
+                <PlayerProfileView
+                  players={roster}
+                  selectedPlayerId={selectedPlayerId}
+                  onSelectPlayer={setSelectedPlayerId}
+                />
+              </ErrorBoundary>
+            )}
 
-          {activeTab === 'analytics' && (
-            <TeamAnalyticsView sessions={sessions} records={records} />
-          )}
+            {activeTab === 'analytics' && (
+              <TeamAnalyticsView sessions={sessions} records={records} />
+            )}
 
-          {activeTab === 'comparison' && <PlayerComparisonView players={roster} />}
+            {activeTab === 'comparison' && <PlayerComparisonView players={roster} />}
 
-          {activeTab === 'future_modules' && <FutureModulesView roster={roster} />}
+            {activeTab === 'future_modules' && <FutureModulesView roster={roster} />}
 
-          {activeTab === 'settings' && <SettingsView roster={roster} onRefresh={refreshData} />}
+            {activeTab === 'settings' && <SettingsView roster={roster} onRefresh={refreshData} />}
+          </ErrorBoundary>
         </main>
       </div>
     </div>

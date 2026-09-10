@@ -197,21 +197,29 @@ export function calcPearsonR(xArr: number[], yArr: number[]): {
   const rClamped = Math.max(-0.9999, Math.min(0.9999, r));
   const r2 = rClamped * rClamped;
 
-  // 95% CI via Fisher z-transform
-  const z = 0.5 * Math.log((1 + rClamped) / (1 - rClamped));
-  const seZ = 1 / Math.sqrt(n - 3);
-  const zLower = z - 1.96 * seZ;
-  const zUpper = z + 1.96 * seZ;
+  // 95% CI via Fisher z-transform requires n >= 4
+  let ciLower: number | null = null;
+  let ciUpper: number | null = null;
 
-  const ciLower = (Math.exp(2 * zLower) - 1) / (Math.exp(2 * zLower) + 1);
-  const ciUpper = (Math.exp(2 * zUpper) - 1) / (Math.exp(2 * zUpper) + 1);
+  if (n >= 4) {
+    const z = 0.5 * Math.log((1 + rClamped) / (1 - rClamped));
+    const seZ = 1 / Math.sqrt(n - 3);
+    const zLower = z - 1.96 * seZ;
+    const zUpper = z + 1.96 * seZ;
+
+    const lowerVal = (Math.exp(2 * zLower) - 1) / (Math.exp(2 * zLower) + 1);
+    const upperVal = (Math.exp(2 * zUpper) - 1) / (Math.exp(2 * zUpper) + 1);
+
+    if (Number.isFinite(lowerVal) && !isNaN(lowerVal)) ciLower = Number(lowerVal.toFixed(2));
+    if (Number.isFinite(upperVal) && !isNaN(upperVal)) ciUpper = Number(upperVal.toFixed(2));
+  }
 
   return {
     r: Number(rClamped.toFixed(2)),
     r2: Number(r2.toFixed(2)),
     n,
-    ciLower: Number(ciLower.toFixed(2)),
-    ciUpper: Number(ciUpper.toFixed(2)),
+    ciLower,
+    ciUpper,
   };
 }
 

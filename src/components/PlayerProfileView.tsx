@@ -141,7 +141,7 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
   // Helper to extract metric value (total vs density)
   const getMetricValue = (r: PlayerSessionRecord, metricKey: keyof CoreMetrics, norm: NormalizationMode): number | null => {
     const rawVal = r[metricKey];
-    if (rawVal === null || rawVal === undefined) return null;
+    if (rawVal === null || rawVal === undefined || isNaN(rawVal)) return null;
     if (norm === 'TOTAL') return rawVal;
 
     // Normalization logic:
@@ -151,16 +151,17 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
       ? r.game_minutes
       : (r.duration_min && r.duration_min > 0 ? r.duration_min : null);
 
-    if (!minutes || minutes <= 0) return null;
-    return rawVal / minutes;
+    if (!minutes || minutes <= 0 || isNaN(minutes)) return null;
+    const res = rawVal / minutes;
+    return Number.isFinite(res) ? res : null;
   };
 
-  const activeMetricMeta = METRIC_LABELS[activeMetricTab];
+  const activeMetricMeta = METRIC_LABELS[activeMetricTab] || METRIC_LABELS.distance_m;
 
   // Calculate current & highest values
   const validMetricVals = filteredRecords
     .map((r) => getMetricValue(r, activeMetricTab, normMode))
-    .filter((v): v is number => v !== null && v !== undefined);
+    .filter((v): v is number => v !== null && v !== undefined && !isNaN(v) && Number.isFinite(v));
 
   const currentVal = validMetricVals.length > 0 ? validMetricVals[0] : null;
   const highestVal = validMetricVals.length > 0 ? Math.max(...validMetricVals) : null;
@@ -174,6 +175,7 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
       : (r.duration_min && r.duration_min > 0 ? r.duration_min : null);
 
     const extVal = getMetricValue(r, activeMetricTab, normMode);
+    const validExtVal = extVal !== null && !isNaN(extVal) && Number.isFinite(extVal) ? Math.round(extVal) : 0;
 
     let normLabel = 'Total';
     let minutesLabel = 'Duration: N/A';
@@ -189,8 +191,8 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
       date: r.date,
       session_type: r.session_type,
       session_name: r.session_name || r.session_type,
-      extVal: extVal !== null ? Math.round(extVal) : 0,
-      rpe: r.RPE ?? null,
+      extVal: validExtVal,
+      rpe: (r.RPE !== null && r.RPE !== undefined && !isNaN(r.RPE)) ? r.RPE : null,
       rawDistance: r.distance_m ?? 0,
       rawAccel: r.accumulated_acceleration_load ?? 0,
       rawDecel: r.deceleration_load ?? 0,
@@ -208,7 +210,7 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
 
   // Scatter plot data for valid points (where both extVal & RPE exist)
   const scatterData = chartData
-    .filter((d) => d.rpe !== null && d.extVal !== null)
+    .filter((d) => d.rpe !== null && d.extVal !== null && !isNaN(d.rpe) && !isNaN(d.extVal) && Number.isFinite(d.extVal) && Number.isFinite(d.rpe))
     .map((d) => ({
       x: d.extVal,
       y: d.rpe!,
@@ -225,7 +227,7 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
     }));
 
   // Correlation & Regression Analysis via stats.ts
-  const correlationPairs = chartData.filter((d) => d.rpe !== null && d.extVal !== null);
+  const correlationPairs = chartData.filter((d) => d.rpe !== null && d.extVal !== null && !isNaN(d.rpe) && !isNaN(d.extVal));
   const xVals = correlationPairs.map((d) => d.extVal);
   const yVals = correlationPairs.map((d) => d.rpe!);
 
@@ -791,7 +793,9 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
               <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 space-y-2 text-xs">
                 <div className="text-[10px] font-black text-purple-400 uppercase tracking-wider flex items-center justify-between">
                   <span>RPE VS {activeMetricMeta.name.toUpperCase()} REGRESSION & CORRELATION</span>
-                  <HelpCircle className="w-3.5 h-3.5" title={STAT_TOOLTIPS.pearsonR} />
+                  <span title={STAT_TOOLTIPS.pearsonR} className="cursor-help">
+                    <HelpCircle className="w-3.5 h-3.5" />
+                  </span>
                 </div>
 
                 {pearsonRes.r === null ? (

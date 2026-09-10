@@ -283,23 +283,25 @@ export function evaluateContextMetric(
 
   const mean = baseline.mean;
   const sd = baseline.sd || 0;
-  const pctChange = mean > 0 ? Number((((currentValue - mean) / mean) * 100).toFixed(1)) : 0;
+  const pctChange = (mean !== null && mean > 0) ? Number((((currentValue - mean) / mean) * 100).toFixed(1)) : 0;
   const zScore = calcZScore(currentValue, mean, sd);
   const percentileRank = calcPercentileRank(baseline.rawValues, currentValue);
 
   let status: TrafficLightStatus = 'NORMAL';
   let flagColor: 'RED' | 'YELLOW' | 'GREEN' | 'BLUE' | 'GRAY' = 'GREEN';
 
-  if (zScore >= 1.5 || pctChange >= 25) {
+  const validZ = zScore !== null && zScore !== undefined && !isNaN(zScore);
+
+  if ((validZ && zScore >= 1.5) || pctChange >= 25) {
     status = 'UNUSUALLY_HIGH';
     flagColor = 'RED';
-  } else if (zScore >= 0.75 || pctChange >= 12) {
+  } else if ((validZ && zScore >= 0.75) || pctChange >= 12) {
     status = 'ABOVE_TYPICAL';
     flagColor = 'YELLOW';
-  } else if (zScore <= -1.5 || pctChange <= -25) {
+  } else if ((validZ && zScore <= -1.5) || pctChange <= -25) {
     status = 'UNUSUALLY_LOW';
     flagColor = 'BLUE';
-  } else if (zScore <= -0.75 || pctChange <= -12) {
+  } else if ((validZ && zScore <= -0.75) || pctChange <= -12) {
     status = 'BELOW_TYPICAL';
     flagColor = 'BLUE';
   } else {
@@ -308,9 +310,10 @@ export function evaluateContextMetric(
   }
 
   // Explicit "WHY?" Explanation
-  const zStr = zScore >= 0 ? `+${zScore.toFixed(2)} SD` : `${zScore.toFixed(2)} SD`;
-  const pctStr = pctChange >= 0 ? `+${pctChange.toFixed(1)}%` : `${pctChange.toFixed(1)}%`;
-  const reasonWhy = `${meta.label} (${formatWholeNumber(currentValue)} ${meta.unit}) is ${zStr} (${pctStr}) relative to this player's historical ${targetCtx.toLowerCase()} baseline mean (${formatWholeNumber(mean)} ${meta.unit}) and sits at the ${percentileRank}th percentile of previous ${targetCtx.toLowerCase()}s.`;
+  const zStr = validZ ? (zScore >= 0 ? `+${zScore.toFixed(2)} SD` : `${zScore.toFixed(2)} SD`) : 'Baseline SD=0';
+  const pctStr = pctChange !== null && !isNaN(pctChange) ? (pctChange >= 0 ? `+${pctChange.toFixed(1)}%` : `${pctChange.toFixed(1)}%`) : '0%';
+  const pRankStr = percentileRank !== null && !isNaN(percentileRank) ? `${percentileRank}th` : 'N/A';
+  const reasonWhy = `${meta.label} (${formatWholeNumber(currentValue)} ${meta.unit}) is ${zStr} (${pctStr}) relative to this player's historical ${targetCtx.toLowerCase()} baseline mean (${formatWholeNumber(mean)} ${meta.unit}) and sits at the ${pRankStr} percentile of previous ${targetCtx.toLowerCase()}s.`;
 
   // Exposure Gap % Calculation for underloaded metrics
   let exposureGapPct: number | null = null;
