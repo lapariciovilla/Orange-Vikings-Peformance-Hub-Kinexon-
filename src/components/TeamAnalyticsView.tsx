@@ -79,10 +79,15 @@ export const TeamAnalyticsView: React.FC<TeamAnalyticsViewProps> = ({ sessions, 
         metricVal = Math.round(sum / vals.length); // Team Average
       }
 
+      const isGame = s.session_type === 'Game' || (s.session_name || '').toLowerCase().includes('vs');
+
       return {
         date: s.date,
         name: `${s.date} (${s.session_type})`,
         value: metricVal,
+        sessionType: isGame ? 'GAME' : 'PRACTICE',
+        rawType: s.session_type,
+        sessionName: s.session_name,
         playerCount: sRecords.length,
       };
     });
@@ -254,20 +259,49 @@ export const TeamAnalyticsView: React.FC<TeamAnalyticsViewProps> = ({ sessions, 
                   tickFormatter={(val) => Math.round(val).toString()}
                 />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#09090b',
-                    borderColor: '#3f3f46',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    color: '#fff',
+                  content={({ active, payload }) => {
+                    if (!active || !payload || payload.length === 0) return null;
+                    const d = payload[0].payload;
+                    return (
+                      <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-lg text-xs space-y-1 shadow-2xl text-white">
+                        <div className="font-black text-orange-400 border-b border-zinc-800 pb-1 flex items-center justify-between">
+                          <span>{d.date}</span>
+                          <span className={d.sessionType === 'GAME' ? 'text-purple-400' : 'text-orange-400'}>
+                            [{d.sessionType}]
+                          </span>
+                        </div>
+                        <div className="text-zinc-300 font-bold">{d.sessionName || d.rawType}</div>
+                        <div className="flex items-center justify-between gap-4 pt-1">
+                          <span className="text-zinc-400">{activeMetricMeta.label}:</span>
+                          <span className="font-black text-amber-400">
+                            {formatWholeNumber(d.value)} {activeMetricMeta.unit}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-zinc-500">
+                          Team Average ({d.playerCount} athletes)
+                        </div>
+                      </div>
+                    );
                   }}
-                  formatter={(val: number) => [`${formatWholeNumber(val)} ${activeMetricMeta.unit}`, activeMetricMeta.label]}
-                  labelFormatter={(label) => `Session Date: ${label}`}
                 />
-                <Bar dataKey="value" name={activeMetricMeta.label} fill={activeMetricMeta.color} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="value" name={activeMetricMeta.label} radius={[4, 4, 0, 0]}>
+                  {teamTrendData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.sessionType === 'GAME' ? '#a855f7' : '#f97316'} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
+        </div>
+        <div className="flex items-center justify-center space-x-6 text-xs font-bold text-zinc-400 pt-1">
+          <div className="flex items-center space-x-2">
+            <span className="w-3 h-3 rounded-sm bg-orange-500 inline-block"></span>
+            <span>Practice Session</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <span className="w-3 h-3 rounded-sm bg-purple-500 inline-block"></span>
+            <span>Game Session</span>
+          </div>
         </div>
       </div>
 

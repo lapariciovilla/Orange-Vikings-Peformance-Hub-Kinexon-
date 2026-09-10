@@ -135,7 +135,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {sessionMeta ? sessionMeta.session_name || sessionMeta.session_type : 'Session Dashboard'}
             </h1>
             <div className="flex items-center space-x-4 mt-2 text-xs text-zinc-400">
-              <span className="bg-zinc-800 px-2.5 py-1 rounded text-zinc-300 font-semibold border border-zinc-700/60">
+              <span className={`px-2.5 py-1 rounded font-extrabold uppercase border ${
+                sessionMeta?.session_type === 'Game' || (sessionMeta?.session_name || '').toLowerCase().includes('vs')
+                  ? 'bg-purple-950 text-purple-300 border-purple-800'
+                  : 'bg-orange-950 text-orange-400 border-orange-800'
+              }`}>
                 {sessionMeta?.session_type || 'Practice'}
               </span>
               <span className="flex items-center text-zinc-300 font-medium">

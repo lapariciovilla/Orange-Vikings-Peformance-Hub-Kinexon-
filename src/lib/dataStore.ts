@@ -517,13 +517,26 @@ export class DataStore {
     };
   }
 
-  // Calculate long-term & recent individual baseline for a player
+  // Calculate long-term & recent individual baseline for a player (Context-Aware for Game vs Practice)
   static calculatePlayerBaseline(
     playerId: string,
-    metric: keyof CoreMetrics | 'RPE'
+    metric: keyof CoreMetrics | 'RPE',
+    sessionType?: string,
+    sessionName?: string
   ): IndividualBaseline {
     const playerRecords = this.getRecordsForPlayer(playerId);
-    const validValues = playerRecords
+    const targetCtx = sessionType ? (
+      (sessionType.toLowerCase() === 'game' || sessionType.toLowerCase().includes('match') || sessionType.toLowerCase().includes('vs') || (sessionName || '').toLowerCase().includes('vs')) ? 'GAME' : 'PRACTICE'
+    ) : null;
+
+    const filteredRecords = targetCtx ? playerRecords.filter((r) => {
+      const rType = (r.session_type || '').toLowerCase();
+      const rName = (r.session_name || '').toLowerCase();
+      const rCtx = (rType === 'game' || rType.includes('match') || rType.includes('vs') || rName.includes('vs')) ? 'GAME' : 'PRACTICE';
+      return rCtx === targetCtx;
+    }) : playerRecords;
+
+    const validValues = filteredRecords
       .map((r) => metric === 'RPE' ? r.RPE : r[metric])
       .filter((val): val is number => val !== null && val !== undefined);
 
@@ -546,14 +559,19 @@ export class DataStore {
     };
   }
 
-  // Evaluate Flag for a specific metric vs baseline
+  // Evaluate Flag for a specific metric vs context-aware baseline
   static evaluateMetricFlag(
     playerId: string,
     currentValue: number | null,
-    metric: keyof CoreMetrics | 'RPE'
+    metric: keyof CoreMetrics | 'RPE',
+    sessionType?: string,
+    sessionName?: string
   ): MetricFlag {
     const settings = this.getSettings();
-    const baselineInfo = this.calculatePlayerBaseline(playerId, metric);
+    const baselineInfo = this.calculatePlayerBaseline(playerId, metric, sessionType, sessionName);
+    const contextTag = sessionType ? (
+      (sessionType.toLowerCase() === 'game' || sessionType.toLowerCase().includes('match') || (sessionName || '').toLowerCase().includes('vs')) ? 'GAME' : 'PRACTICE'
+    ) : 'HISTORICAL';
 
     if (baselineInfo.sampleSize < settings.min_sessions_for_baseline || currentValue === null) {
       return {
@@ -562,7 +580,7 @@ export class DataStore {
         currentValue,
         baselineValue: baselineInfo.recentAvg,
         pctChange: null,
-        reason: 'Insufficient individual history (< 3 sessions logged)',
+        reason: `Insufficient individual ${contextTag.toLowerCase()} history (< 3 sessions logged)`,
       };
     }
 
@@ -583,8 +601,11 @@ export class DataStore {
     const metricLabels: Record<string, string> = {
       distance_m: 'Total Distance',
       accumulated_acceleration_load: 'Accumulated Accel Load',
+      accumulated_acceleration_load_per_min: 'Accel Load / min',
+      anaerobic_activity_time: 'Anaerobic Activity Time',
+      deceleration_load: 'Deceleration Load',
+      deceleration_load_per_min: 'Decel Load / min',
       mechanical_load: 'Mechanical Load',
-      deceleration_load: 'Mechanical Deceleration Load',
       jump_load: 'Jump Load',
       RPE: 'Subjective RPE',
     };
@@ -598,7 +619,7 @@ export class DataStore {
         currentValue,
         baselineValue: baseline,
         pctChange,
-        reason: `RED: ${label} (+${pctChange}%) is unusually high compared with recent individual baseline (${baseline}).`,
+        reason: `RED: ${label} (+${pctChange}%) is unusually high compared with recent individual ${contextTag.toLowerCase()} baseline (${baseline}).`,
       };
     } else if (pctChange > settings.yellow_threshold_pct) {
       return {
@@ -607,7 +628,7 @@ export class DataStore {
         currentValue,
         baselineValue: baseline,
         pctChange,
-        reason: `YELLOW: ${label} (+${pctChange}%) is elevated compared with recent individual baseline (${baseline}).`,
+        reason: `YELLOW: ${label} (+${pctChange}%) is elevated compared with recent individual ${contextTag.toLowerCase()} baseline (${baseline}).`,
       };
     } else {
       return {
@@ -616,7 +637,7 @@ export class DataStore {
         currentValue,
         baselineValue: baseline,
         pctChange,
-        reason: `GREEN: ${label} is within expected individual range (${baseline}).`,
+        reason: `GREEN: ${label} is within expected individual ${contextTag.toLowerCase()} range (${baseline}).`,
       };
     }
   }
@@ -632,11 +653,11 @@ export class DataStore {
     ];
 
     const flags: MetricFlag[] = metrics.map((m) =>
-      this.evaluateMetricFlag(record.player_id, record[m], m)
+      this.evaluateMetricFlag(record.player_id, record[m], m, record.session_type, record.session_name)
     );
 
     if (record.RPE !== undefined && record.RPE !== null) {
-      flags.push(this.evaluateMetricFlag(record.player_id, record.RPE, 'RPE'));
+      flags.push(this.evaluateMetricFlag(record.player_id, record.RPE, 'RPE', record.session_type, record.session_name));
     }
 
     const redFlags = flags.filter((f) => f.status === 'RED');

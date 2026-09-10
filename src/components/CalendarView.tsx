@@ -241,8 +241,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
               <h2 className="text-base font-black text-white">{currentMonthName} {currentYear} DAILY AVERAGE METRICS</h2>
             </div>
             <div className="flex items-center space-x-3 text-[11px] font-bold">
-              <span className="flex items-center"><span className="w-2.5 h-2.5 rounded-full bg-rose-500 mr-1"></span> Game Day</span>
-              <span className="flex items-center"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 mr-1"></span> Practice</span>
+              <span className="flex items-center"><span className="w-2.5 h-2.5 rounded-full bg-purple-500 mr-1"></span> Game Day</span>
+              <span className="flex items-center"><span className="w-2.5 h-2.5 rounded-full bg-orange-500 mr-1"></span> Practice</span>
               <span className="flex items-center"><span className="w-2.5 h-2.5 rounded-full bg-zinc-700 mr-1"></span> Off Day</span>
             </div>
           </div>
@@ -284,9 +284,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
               if (session || recsForDay.length > 0) {
                 const isGame = session?.session_type === 'Game' || recsForDay.some((r) => r.session_type === 'Game');
                 if (isGame) {
-                  tileStyle = 'bg-rose-950/30 border-rose-700/80 text-rose-300 hover:border-rose-500';
+                  tileStyle = 'bg-purple-950/40 border-purple-700/80 text-purple-300 hover:border-purple-500';
                 } else {
-                  tileStyle = 'bg-amber-950/20 border-amber-800/80 text-amber-300 hover:border-amber-500';
+                  tileStyle = 'bg-orange-950/30 border-orange-800/80 text-orange-300 hover:border-orange-500';
                 }
               }
 
@@ -305,8 +305,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
                     {(session || recsForDay.length > 0) && (
                       <span className={`text-[8px] font-black px-1 rounded uppercase ${
                         (session?.session_type === 'Game' || recsForDay.some((r) => r.session_type === 'Game'))
-                          ? 'bg-rose-600 text-zinc-950'
-                          : 'bg-amber-500 text-zinc-950'
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-orange-500 text-zinc-950'
                       }`}>
                         {(session?.session_type === 'Game' || recsForDay.some((r) => r.session_type === 'Game')) ? 'GAME' : 'PRACTICE'}
                       </span>

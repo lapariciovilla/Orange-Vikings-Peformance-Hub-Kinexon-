@@ -138,6 +138,7 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
           sessions.map((session) => {
           const recs = DataStore.getRecordsForSession(session.id);
           const stats = DataStore.calculateTeamAverages(recs);
+          const isGame = session.session_type === 'Game' || (session.session_name || '').toLowerCase().includes('vs');
 
           return (
             <div
@@ -147,7 +148,11 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
             >
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-extrabold text-orange-400 bg-orange-950/60 border border-orange-800/60 px-2.5 py-1 rounded uppercase tracking-wider">
+                  <span className={`text-xs font-black px-2.5 py-1 rounded uppercase tracking-wider border ${
+                    isGame
+                      ? 'bg-purple-950/80 text-purple-300 border-purple-800'
+                      : 'bg-orange-950/80 text-orange-400 border-orange-800'
+                  }`}>
                     {session.session_type}
                   </span>
                   <span className="text-xs text-zinc-400 font-bold">{session.date}</span>

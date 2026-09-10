@@ -3,6 +3,13 @@ import { Player, CoreMetrics, PlayerSessionRecord } from '../types';
 import { DataStore } from '../lib/dataStore';
 import { formatWholeNumber } from '../lib/positionalUtils';
 import {
+  evaluateContextMetric,
+  evaluateFullSessionContext,
+  getSessionTypeColor,
+  isGameSession,
+  getSessionTypeBadgeClasses,
+} from '../lib/contextBaseline';
+import {
   calcStatsSummary,
   calcPearsonR,
   calcSpearmanRho,
@@ -25,6 +32,7 @@ import {
   Tooltip,
   CartesianGrid,
   Legend,
+  Cell,
 } from 'recharts';
 import {
   Activity,
@@ -37,6 +45,7 @@ import {
   Sliders,
   Sparkles,
   Layers,
+  Zap,
 } from 'lucide-react';
 
 interface PlayerProfileViewProps {
@@ -338,44 +347,113 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
         </div>
       </div>
 
-      {/* Baseline / Flag Evaluation Banner */}
-      <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
-        <div className="flex items-center space-x-3">
-          <Activity className="w-5 h-5 text-orange-500" />
-          <div>
-            <div className="text-xs font-black text-white uppercase tracking-wider">
-              INDIVIDUAL BASELINE & MONITORING STATUS
-            </div>
-            <div className="text-xs text-zinc-400">
-              {flagEvaluation.reason}
-            </div>
-          </div>
-        </div>
+      {/* Context-Aware Baseline & Monitoring Status Banner */}
+      {(() => {
+        const contextEval = evaluateContextMetric(
+          player.id,
+          currentVal,
+          activeMetricTab,
+          latestRecord?.session_type,
+          latestRecord?.session_name
+        );
+        const fullContext = latestRecord ? evaluateFullSessionContext(latestRecord) : null;
+        const isGame = isGameSession(latestRecord?.session_type, latestRecord?.session_name);
 
-        <div>
-          {flagEvaluation.status === 'INSUFFICIENT_HISTORY' ? (
-            <div className="flex items-center space-x-2 bg-amber-950/80 border border-amber-800 text-amber-300 px-3 py-1.5 rounded-lg text-xs font-bold">
-              <AlertCircle className="w-4 h-4 text-amber-400" />
-              <span>INSUFFICIENT HISTORY (&lt; 3 SESSIONS)</span>
+        return (
+          <div className="space-y-4">
+            {/* Context-Aware Baseline Banner with Explicit WHY? Explanation */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-xl space-y-3">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
+                <div className="flex items-center space-x-3">
+                  <Activity className="w-5 h-5 text-orange-500" />
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs font-black text-white uppercase tracking-wider">
+                        CONTEXT-AWARE INDIVIDUAL BASELINE & EXPOSURE EXPLANATION
+                      </span>
+                      {latestRecord && (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${getSessionTypeBadgeClasses(latestRecord.session_type, latestRecord.session_name)}`}>
+                          {isGame ? 'GAME CONTEXT' : 'PRACTICE CONTEXT'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-zinc-400 mt-0.5">
+                      Comparing against {player.displayName}'s historical {contextEval.contextLabel.toLowerCase()} (N={contextEval.baseline.sampleSize})
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  {contextEval.flagColor === 'RED' ? (
+                    <div className="flex items-center space-x-2 bg-rose-950/80 border border-rose-800 text-rose-300 px-3.5 py-1.5 rounded-lg text-xs font-black">
+                      <AlertCircle className="w-4 h-4 text-rose-400" />
+                      <span>UNUSUALLY HIGH EXPOSURE ({contextEval.pctChange ? `+${contextEval.pctChange}%` : ''})</span>
+                    </div>
+                  ) : contextEval.flagColor === 'YELLOW' ? (
+                    <div className="flex items-center space-x-2 bg-amber-950/80 border border-amber-800 text-amber-300 px-3.5 py-1.5 rounded-lg text-xs font-black">
+                      <AlertCircle className="w-4 h-4 text-amber-400" />
+                      <span>ELEVATED EXPOSURE ({contextEval.pctChange ? `+${contextEval.pctChange}%` : ''})</span>
+                    </div>
+                  ) : contextEval.flagColor === 'BLUE' ? (
+                    <div className="flex items-center space-x-2 bg-sky-950/80 border border-sky-800 text-sky-300 px-3.5 py-1.5 rounded-lg text-xs font-black">
+                      <Zap className="w-4 h-4 text-sky-400" />
+                      <span>BELOW TYPICAL EXPOSURE ({contextEval.exposureGapPct ? `-${contextEval.exposureGapPct}% GAP` : ''})</span>
+                    </div>
+                  ) : contextEval.flagColor === 'GRAY' ? (
+                    <div className="flex items-center space-x-2 bg-zinc-950 border border-zinc-800 text-zinc-400 px-3.5 py-1.5 rounded-lg text-xs font-bold">
+                      <AlertCircle className="w-4 h-4 text-zinc-500" />
+                      <span>INSUFFICIENT CONTEXT HISTORY (&lt;3 SESSIONS)</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2 bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-3.5 py-1.5 rounded-lg text-xs font-black">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>TYPICAL BASELINE RANGE</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Explicit WHY? Reason Explanation */}
+              <div className="bg-zinc-950 p-3.5 rounded-lg border border-zinc-800 text-xs text-zinc-200 font-medium leading-relaxed">
+                <span className="text-orange-400 font-black uppercase text-[10px] tracking-widest block mb-0.5">
+                  EXPOSURE DIAGNOSTIC ("WHY?"):
+                </span>
+                {contextEval.reasonWhy}
+              </div>
             </div>
-          ) : flagEvaluation.status === 'RED' ? (
-            <div className="flex items-center space-x-2 bg-rose-950/80 border border-rose-800 text-rose-300 px-3 py-1.5 rounded-lg text-xs font-black">
-              <AlertCircle className="w-4 h-4 text-rose-400" />
-              <span>HIGH / UNUSUAL EXPOSURE (+{flagEvaluation.pctChange}%)</span>
-            </div>
-          ) : flagEvaluation.status === 'YELLOW' ? (
-            <div className="flex items-center space-x-2 bg-amber-950/80 border border-amber-800 text-amber-300 px-3 py-1.5 rounded-lg text-xs font-black">
-              <AlertCircle className="w-4 h-4 text-amber-400" />
-              <span>ELEVATED EXPOSURE (+{flagEvaluation.pctChange}%)</span>
-            </div>
-          ) : (
-            <div className="flex items-center space-x-2 bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-3 py-1.5 rounded-lg text-xs font-black">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>EXPECTED INDIVIDUAL RANGE</span>
-            </div>
-          )}
-        </div>
-      </div>
+
+            {/* LOADING STATUS & EXPOSURE GAP CARD FOR COACH LUIS */}
+            {fullContext && fullContext.loadingSignal.needed && (
+              <div className="bg-zinc-900 border-2 border-sky-500/80 rounded-xl p-5 shadow-2xl space-y-3">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <div className="flex items-center space-x-2">
+                    <Zap className="w-5 h-5 text-sky-400" />
+                    <h3 className="text-sm font-black text-white uppercase tracking-wide">
+                      LOADING STATUS & EXPOSURE GAP DETECTED
+                    </h3>
+                  </div>
+                  <span className="text-xs font-black text-sky-400 bg-sky-950 border border-sky-800 px-2.5 py-1 rounded">
+                    GAP: {fullContext.maxExposureGapPct}% BELOW TYPICAL BASELINE
+                  </span>
+                </div>
+
+                <div className="bg-zinc-950 p-4 rounded-lg border border-sky-900/60 text-xs space-y-2">
+                  <div className="text-[10px] font-black text-sky-400 uppercase tracking-widest">
+                    POTENTIAL ADDITIONAL LOADING SIGNAL
+                  </div>
+                  <p className="text-zinc-200 font-bold leading-relaxed">
+                    "{fullContext.loadingSignal.message}"
+                  </p>
+                </div>
+
+                <div className="text-[10px] text-zinc-400 font-medium italic">
+                  Note: The system provides Coach Luis with a potential loading/compensation signal. It does NOT automatically prescribe or mandate exercises. The decision remains with the S&C Coach based on game schedule, minutes, and athlete fatigue.
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Metric Selector & Normalization Controls */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -552,10 +630,13 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
                   yAxisId="left"
                   dataKey="extVal"
                   name={`${activeMetricMeta.name} (${normMode === 'NORMALIZED' ? 'Density' : 'Total'})`}
-                  fill={activeMetricMeta.color}
-                  opacity={0.8}
                   radius={[4, 4, 0, 0]}
-                />
+                >
+                  {chartData.map((entry, index) => {
+                    const isGame = isGameSession(entry.session_type, entry.session_name);
+                    return <Cell key={`cell-${index}`} fill={isGame ? '#a855f7' : '#f97316'} />;
+                  })}
+                </Bar>
                 <Line
                   yAxisId="right"
                   type="monotone"
@@ -568,6 +649,16 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
               </ComposedChart>
             </ResponsiveContainer>
           )}
+        </div>
+        <div className="flex items-center justify-center space-x-6 text-xs font-bold text-zinc-400 pt-1">
+          <div className="flex items-center space-x-2">
+            <span className="w-3 h-3 rounded-sm bg-orange-500 inline-block"></span>
+            <span>Practice Session</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <span className="w-3 h-3 rounded-sm bg-purple-500 inline-block"></span>
+            <span>Game Session</span>
+          </div>
         </div>
       </div>
 
