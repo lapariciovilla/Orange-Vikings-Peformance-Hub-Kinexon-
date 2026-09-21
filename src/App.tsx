@@ -10,6 +10,7 @@ import { SessionHistoryView } from './components/SessionHistoryView';
 import { PlayerProfileView } from './components/PlayerProfileView';
 import { TeamAnalyticsView } from './components/TeamAnalyticsView';
 import { PlayerComparisonView } from './components/PlayerComparisonView';
+import { LoadThresholdsView } from './components/LoadThresholdsView';
 import { FutureModulesView } from './components/FutureModulesView';
 import { SettingsView } from './components/SettingsView';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -100,6 +101,10 @@ export default function App() {
                 }}
                 onNavigateImport={() => setActiveTab('import')}
               />
+            )}
+
+            {activeTab === 'thresholds' && (
+              <LoadThresholdsView players={roster} records={records} />
             )}
 
             {activeTab === 'import' && (

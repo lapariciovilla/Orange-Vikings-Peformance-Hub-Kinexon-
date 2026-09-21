@@ -52,6 +52,17 @@ export function calcSampleSD(arr: number[]): number | null {
   return Math.sqrt(variance);
 }
 
+export const calcSD = calcSampleSD;
+
+export function calcPercentiles(arr: number[], percentiles: number[]): Record<number, number | null> {
+  const result: Record<number, number | null> = {};
+  percentiles.forEach((p) => {
+    result[p] = calcPercentile(arr, p);
+  });
+  return result;
+}
+
+
 /**
  * Calculates Coefficient of Variation (CV%) = (SD / Mean) * 100.
  */

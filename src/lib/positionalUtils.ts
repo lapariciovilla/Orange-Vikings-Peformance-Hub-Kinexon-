@@ -1,5 +1,11 @@
 export type PositionalGroup = 'POINT GUARDS' | 'FORWARDS' | 'CENTERS';
 
+export const POSITION_GROUPS: Record<PositionalGroup | string, string[]> = {
+  'POINT GUARDS': ['PG', 'SG'],
+  FORWARDS: ['SF', 'PF'],
+  CENTERS: ['C', 'PF'],
+};
+
 /**
  * Classify athlete into Positional Group for Ehime Orange Vikings.
  * Official Roster Groups:
@@ -14,7 +20,14 @@ export function getPositionalGroup(player: {
   displayName?: string;
   player_name?: string;
   position?: string;
-}): PositionalGroup {
+} | string): PositionalGroup {
+  if (typeof player === 'string') {
+    const pos = player.toUpperCase();
+    if (pos.includes('PG')) return 'POINT GUARDS';
+    if (pos.includes('C')) return 'CENTERS';
+    return 'FORWARDS';
+  }
+
   const num = (player.number || player.player_number || '').replace(/[^0-9]/g, '');
   const name = (player.displayName || player.player_name || '').toLowerCase();
 
@@ -53,6 +66,9 @@ export function getPositionalGroup(player: {
   if (pos.includes('C')) return 'CENTERS';
   return 'FORWARDS';
 }
+
+export const getPositionGroup = getPositionalGroup;
+
 
 /**
  * Formats any numerical value as a rounded whole number.

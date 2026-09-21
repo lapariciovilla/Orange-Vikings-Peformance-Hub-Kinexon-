@@ -131,3 +131,58 @@ export interface AuditLog {
   user: string;
   details: string;
 }
+
+export type Position = 'PG' | 'SG' | 'SF' | 'PF' | 'C' | string;
+
+export type ReferenceType =
+  | 'Individual Game'
+  | 'Individual Practice'
+  | 'Position Reference'
+  | 'Team Reference'
+  | 'Insufficient Data';
+
+export type DataConfidenceLabel =
+  | 'Insufficient Data (n<3)'
+  | 'Exploratory (n=3-4)'
+  | 'Provisional (n=5-7)'
+  | 'Individual Threshold (n>=8)'
+  | 'Stable Distribution (n>=10)'
+  | 'High Confidence (n>=15)';
+
+export type ExposureStatus =
+  | 'BELOW_TYPICAL'
+  | 'TYPICAL'
+  | 'ABOVE_TYPICAL'
+  | 'HIGH_EXPOSURE'
+  | 'VERY_HIGH_HISTORICAL'
+  | 'INSUFFICIENT_DATA';
+
+export interface PlayerMetricThreshold {
+  playerId: string;
+  playerName: string;
+  position: string;
+  metric: keyof CoreMetrics;
+  context: 'GAME' | 'PRACTICE';
+  n: number;
+  mean: number | null;
+  median: number | null;
+  sd: number | null;
+  cvPct: number | null;
+  min: number | null;
+  max: number | null;
+  iqr: number | null;
+  p25: number | null;
+  p50: number | null;
+  p75: number | null;
+  p90: number | null;
+  p95: number | null;
+  lowerTarget: number | null;
+  typicalTarget: number | null;
+  highThreshold: number | null;
+  veryHighThreshold: number | null;
+  historicalMax: number | null;
+  referenceType: ReferenceType;
+  confidenceLabel: DataConfidenceLabel;
+  disclaimer: string | null;
+}
+

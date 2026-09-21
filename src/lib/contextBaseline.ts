@@ -139,17 +139,31 @@ export function getSessionTypeBadgeClasses(sessionType?: string, sessionName?: s
 }
 
 // METRIC META CONFIG
-export const METRIC_DISPLAY_INFO: Record<keyof CoreMetrics | 'RPE', { label: string; unit: string; color: string }> = {
-  distance_m: { label: 'Total Distance', unit: 'm', color: '#f59e0b' },
-  accumulated_acceleration_load: { label: 'Accumulated Accel Load', unit: 'au', color: '#f97316' },
-  accumulated_acceleration_load_per_min: { label: 'Accel Load / min', unit: 'au/min', color: '#ea580c' },
-  anaerobic_activity_time: { label: 'Anaerobic Activity Time', unit: 'min', color: '#eab308' },
-  deceleration_load: { label: 'Deceleration Load', unit: 'au', color: '#f43f5e' },
-  deceleration_load_per_min: { label: 'Decel Load / min', unit: 'au/min', color: '#e11d48' },
-  jump_load: { label: 'Jump Load', unit: 'au', color: '#a855f7' },
-  mechanical_load: { label: 'Mechanical Load', unit: 'au', color: '#38bdf8' },
-  RPE: { label: 'Subjective RPE', unit: '1-10', color: '#c084fc' },
+export const METRIC_DISPLAY_INFO: Record<keyof CoreMetrics | 'RPE', { label: string; shortLabel: string; unit: string; color: string }> = {
+  distance_m: { label: 'Total Distance', shortLabel: 'Distance', unit: 'm', color: '#f59e0b' },
+  accumulated_acceleration_load: { label: 'Accumulated Accel Load', shortLabel: 'Accel Load', unit: 'au', color: '#f97316' },
+  accumulated_acceleration_load_per_min: { label: 'Accel Load / min', shortLabel: 'Accel/min', unit: 'au/min', color: '#ea580c' },
+  anaerobic_activity_time: { label: 'Anaerobic Activity Time', shortLabel: 'Anaerobic', unit: 'min', color: '#eab308' },
+  deceleration_load: { label: 'Deceleration Load', shortLabel: 'Decel Load', unit: 'au', color: '#f43f5e' },
+  deceleration_load_per_min: { label: 'Decel Load / min', shortLabel: 'Decel/min', unit: 'au/min', color: '#e11d48' },
+  jump_load: { label: 'Jump Load', shortLabel: 'Jump Load', unit: 'au', color: '#a855f7' },
+  mechanical_load: { label: 'Mechanical Load', shortLabel: 'Mech Load', unit: 'au', color: '#38bdf8' },
+  RPE: { label: 'Subjective RPE', shortLabel: 'RPE', unit: '1-10', color: '#c084fc' },
 };
+
+export const METRIC_LABELS = METRIC_DISPLAY_INFO;
+
+export const CORE_METRIC_KEYS: (keyof CoreMetrics)[] = [
+  'distance_m',
+  'accumulated_acceleration_load',
+  'accumulated_acceleration_load_per_min',
+  'anaerobic_activity_time',
+  'deceleration_load',
+  'deceleration_load_per_min',
+  'jump_load',
+  'mechanical_load',
+];
+
 
 // ==========================================
 // CONTEXT-AWARE BASELINE CALCULATION

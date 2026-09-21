@@ -13,10 +13,12 @@ import {
   Trophy,
   CalendarDays,
   FileText,
+  Target,
 } from 'lucide-react';
 
 export type ActiveTab =
   | 'dashboard'
+  | 'thresholds'
   | 'import'
   | 'games'
   | 'calendar'
@@ -27,6 +29,7 @@ export type ActiveTab =
   | 'comparison'
   | 'future_modules'
   | 'settings';
+
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -45,7 +48,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const navItems = [
     { id: 'dashboard', label: "TODAY'S LOAD", icon: LayoutDashboard },
-    { id: 'import', label: 'IMPORT KINEXON CSV', icon: Upload, highlight: true },
+    { id: 'thresholds', label: 'LOAD THRESHOLDS', icon: Target, highlight: true },
+    { id: 'import', label: 'IMPORT KINEXON CSV', icon: Upload },
     { id: 'games', label: 'GAME LOAD', icon: Trophy },
     { id: 'calendar', label: 'MONTHLY CALENDAR', icon: CalendarDays },
     { id: 'reports', label: 'S&C REPORT GENERATOR', icon: FileText },
