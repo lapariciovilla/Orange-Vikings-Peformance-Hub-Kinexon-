@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PlayerSessionRecord, SessionMeta, CoreMetrics } from '../types';
 import { DataStore } from '../lib/dataStore';
+import { formatPlayerNumber } from '../lib/positionalUtils';
 import {
   TrendingUp,
   Users,
@@ -235,11 +236,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         const redPlayers = records
           .filter((_, i) => flagSummaries[i].overallStatus === 'RED')
-          .map((r) => `#${r.player_number} ${r.player_name}`);
+          .map((r) => `${formatPlayerNumber(r.player_number)} ${r.player_name}`);
 
         const yellowPlayers = records
           .filter((_, i) => flagSummaries[i].overallStatus === 'YELLOW')
-          .map((r) => `#${r.player_number} ${r.player_name}`);
+          .map((r) => `${formatPlayerNumber(r.player_number)} ${r.player_name}`);
 
         return (
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl space-y-4">
@@ -373,7 +374,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
                     <div className="truncate">
                       <div className="flex items-center space-x-2">
-                        <span className="text-orange-400 font-black text-xs">{rec.player_number}</span>
+                        <span className="text-orange-400 font-black text-xs">{formatPlayerNumber(rec.player_number)}</span>
                         <span className="text-white font-bold text-sm truncate group-hover:text-orange-300 transition-colors">
                           {rec.player_name}
                         </span>

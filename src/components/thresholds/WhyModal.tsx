@@ -1,6 +1,7 @@
 import React from 'react';
 import { Player, CoreMetrics, PlayerMetricThreshold } from '../../types';
 import { METRIC_LABELS } from '../../lib/contextBaseline';
+import { formatPlayerNumber } from '../../lib/positionalUtils';
 import { X, Calculator, ShieldCheck, Database } from 'lucide-react';
 
 interface WhyModalProps {
@@ -43,7 +44,7 @@ export const WhyModal: React.FC<WhyModalProps> = ({
               STATISTICAL TRANSPARENCY BREAKDOWN ("WHY?")
             </div>
             <h2 className="text-xl font-black text-white">
-              {player.displayName} ({player.number}) — {meta.label}
+              {player.displayName} ({formatPlayerNumber(player.number)}) — {meta.label}
             </h2>
             <p className="text-xs text-zinc-400 font-medium mt-0.5">
               Deterministic, player-specific distribution calculations derived from historical observations.

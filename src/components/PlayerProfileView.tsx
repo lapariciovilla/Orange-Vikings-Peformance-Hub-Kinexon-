@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Player, CoreMetrics, PlayerSessionRecord } from '../types';
 import { DataStore } from '../lib/dataStore';
-import { formatWholeNumber } from '../lib/positionalUtils';
+import { formatWholeNumber, formatPlayerNumber } from '../lib/positionalUtils';
 import {
   evaluateContextMetric,
   evaluateFullSessionContext,
@@ -306,7 +306,7 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center space-x-4">
           <div className="w-16 h-16 rounded-2xl bg-orange-600/20 border border-orange-500/40 text-orange-400 font-black text-2xl flex items-center justify-center shrink-0">
-            {player.number}
+            {formatPlayerNumber(player.number)}
           </div>
           <div>
             <div className="flex items-center space-x-2">
@@ -339,7 +339,7 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
           >
             {players.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.number} {p.displayName} ({p.position})
+                {formatPlayerNumber(p.number)} {p.displayName} ({p.position})
               </option>
             ))}
           </select>

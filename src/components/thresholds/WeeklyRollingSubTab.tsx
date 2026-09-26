@@ -2,6 +2,7 @@ import React from 'react';
 import { Player, PlayerSessionRecord } from '../../types';
 import { CORE_METRIC_KEYS, METRIC_LABELS } from '../../lib/contextBaseline';
 import { calculateRollingLoadSummaries, calculateWeeklyExposureGaps } from '../../lib/loadThresholdEngine';
+import { formatPlayerNumber } from '../../lib/positionalUtils';
 import { Calendar, Activity, AlertCircle, Info } from 'lucide-react';
 
 interface WeeklyRollingSubTabProps {
@@ -27,7 +28,7 @@ export const WeeklyRollingSubTab: React.FC<WeeklyRollingSubTabProps> = ({
               ROLLING CUMULATIVE LOAD TARGETS & WEEKLY GAP ANALYSIS
             </span>
           </div>
-          <h2 className="text-2xl font-black text-white mt-1">{player.displayName} (#{player.number})</h2>
+          <h2 className="text-2xl font-black text-white mt-1">{player.displayName} ({formatPlayerNumber(player.number)})</h2>
           <p className="text-xs text-zinc-400 mt-1">
             Tracking 3-day, 7-day, 14-day, and 28-day cumulative exposure to identify under-loading or over-exposure windows.
           </p>

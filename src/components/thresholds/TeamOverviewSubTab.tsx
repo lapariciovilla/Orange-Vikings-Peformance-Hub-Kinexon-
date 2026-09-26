@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Player, CoreMetrics, PlayerSessionRecord } from '../../types';
 import { CORE_METRIC_KEYS, METRIC_LABELS } from '../../lib/contextBaseline';
 import { calculateAllPlayerThresholds, evaluateExposureAgainstThreshold } from '../../lib/loadThresholdEngine';
+import { formatPlayerNumber } from '../../lib/positionalUtils';
 import { WhyModal } from './WhyModal';
 import { Search, Filter, HelpCircle, Users } from 'lucide-react';
 
@@ -144,7 +145,7 @@ export const TeamOverviewSubTab: React.FC<TeamOverviewSubTabProps> = ({
                     {/* Player Info */}
                     <td className="p-4 font-sans">
                       <div className="font-bold text-white text-sm">{player.displayName}</div>
-                      <div className="text-[10px] text-zinc-500 font-mono">#{player.number}</div>
+                      <div className="text-[10px] text-zinc-500 font-mono">{formatPlayerNumber(player.number)}</div>
                     </td>
 
                     {/* Position Badge */}

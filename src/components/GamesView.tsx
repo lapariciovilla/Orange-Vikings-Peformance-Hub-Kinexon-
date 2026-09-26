@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Player, SessionMeta, PlayerSessionRecord } from '../types';
 import { DataStore } from '../lib/dataStore';
+import { formatPlayerNumber } from '../lib/positionalUtils';
 import {
   Trophy,
   TrendingUp,
@@ -287,7 +288,7 @@ export const GamesView: React.FC<GamesViewProps> = ({ roster }) => {
                   {extractedMinutes.map((entry, idx) => (
                     <div key={idx} className="flex items-center justify-between bg-zinc-900 px-3 py-1.5 rounded text-xs border border-zinc-800">
                       <div className="flex items-center space-x-2">
-                        <span className="text-orange-400 font-black">#{entry.number}</span>
+                        <span className="text-orange-400 font-black">{formatPlayerNumber(entry.number)}</span>
                         <span className="font-bold text-white">{entry.name}</span>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -408,7 +409,7 @@ export const GamesView: React.FC<GamesViewProps> = ({ roster }) => {
                 {selectedRecords.map((r) => (
                   <tr key={r.id} className="hover:bg-zinc-950 transition-colors">
                     <td className="py-2.5 px-4 font-bold text-white flex items-center space-x-2">
-                      <span className="text-orange-400 font-black text-xs">{r.player_number}</span>
+                      <span className="text-orange-400 font-black text-xs">{formatPlayerNumber(r.player_number)}</span>
                       <span>{r.player_name}</span>
                     </td>
                     <td className="py-2.5 px-3 text-zinc-400 font-bold">{r.position}</td>

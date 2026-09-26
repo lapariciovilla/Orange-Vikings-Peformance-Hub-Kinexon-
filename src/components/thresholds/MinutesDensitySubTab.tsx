@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Player, CoreMetrics, PlayerSessionRecord } from '../../types';
 import { CORE_METRIC_KEYS, METRIC_LABELS } from '../../lib/contextBaseline';
 import { calculateMinuteLoadEstimates } from '../../lib/loadThresholdEngine';
+import { formatPlayerNumber } from '../../lib/positionalUtils';
 import { Clock, TrendingUp, Info } from 'lucide-react';
 
 interface MinutesDensitySubTabProps {
@@ -29,7 +30,7 @@ export const MinutesDensitySubTab: React.FC<MinutesDensitySubTabProps> = ({
               MINUTE MANAGEMENT & LOAD DENSITY ANALYSIS
             </span>
           </div>
-          <h2 className="text-2xl font-black text-white mt-1">{player.displayName} (#{player.number})</h2>
+          <h2 className="text-2xl font-black text-white mt-1">{player.displayName} ({formatPlayerNumber(player.number)})</h2>
           <p className="text-xs text-zinc-400 mt-1">
             Empirical correlation between minutes played and expected KINEXON metrics to assist minute restriction planning.
           </p>

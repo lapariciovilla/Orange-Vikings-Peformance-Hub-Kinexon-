@@ -1,6 +1,7 @@
 import {
   Player,
   PlayerSessionRecord,
+  SessionMeta,
   CoreMetrics,
   Position,
   ReferenceType,
@@ -369,6 +370,51 @@ export interface BackToBackComparison {
   minutes2: number | null;
   rpe1: number | null;
   rpe2: number | null;
+}
+
+export interface SeasonB2BSet {
+  id: string;
+  index: number;
+  title: string;
+  date1: string;
+  date2: string;
+  session1Name: string;
+  session2Name: string;
+}
+
+export function findAllSeasonBackToBackPairs(
+  sessions: SessionMeta[]
+): SeasonB2BSet[] {
+  const gameSessions = sessions
+    .filter((s) => isGameSession(s.session_type, s.session_name))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const result: SeasonB2BSet[] = [];
+  let counter = 1;
+
+  for (let i = 0; i < gameSessions.length - 1; i++) {
+    const s1 = gameSessions[i];
+    const s2 = gameSessions[i + 1];
+
+    const d1 = new Date(s1.date).getTime();
+    const d2 = new Date(s2.date).getTime();
+    const dayDiff = (d2 - d1) / (1000 * 60 * 60 * 24);
+
+    if (dayDiff <= 2 && dayDiff >= 1) {
+      result.push({
+        id: `b2b-${counter}`,
+        index: counter,
+        title: `Back-to-Back #${counter} (${s1.date} vs ${s2.date})`,
+        date1: s1.date,
+        date2: s2.date,
+        session1Name: s1.session_name || `Game on ${s1.date}`,
+        session2Name: s2.session_name || `Game on ${s2.date}`,
+      });
+      counter++;
+    }
+  }
+
+  return result;
 }
 
 export function findBackToBackGamePairs(

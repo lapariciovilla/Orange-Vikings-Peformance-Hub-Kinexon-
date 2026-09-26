@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Player, CoreMetrics } from '../types';
 import { DataStore } from '../lib/dataStore';
-import { formatWholeNumber } from '../lib/positionalUtils';
+import { formatWholeNumber, formatPlayerNumber } from '../lib/positionalUtils';
 import { SessionCalendarPicker } from './SessionCalendarPicker';
 import {
   ResponsiveContainer,
@@ -204,7 +204,7 @@ export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ play
               >
                 {isSel ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : <Plus className="w-3.5 h-3.5 text-zinc-500" />}
                 <span>
-                  {p.number} {p.displayName}
+                  {formatPlayerNumber(p.number)} {p.displayName}
                 </span>
               </button>
             );
@@ -222,7 +222,7 @@ export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ play
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center space-x-2">
                 <span className="w-7 h-7 rounded bg-orange-600/20 text-orange-400 font-black text-xs flex items-center justify-center border border-orange-500/30">
-                  {item.player.number}
+                  {formatPlayerNumber(item.player.number)}
                 </span>
                 <div>
                   <h3 className="font-black text-white text-sm">{item.player.displayName}</h3>

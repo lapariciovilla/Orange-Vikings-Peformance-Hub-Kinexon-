@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Player, CoreMetrics, PlayerSessionRecord } from '../../types';
 import { CORE_METRIC_KEYS, METRIC_LABELS } from '../../lib/contextBaseline';
 import { calculateAllPlayerThresholds, evaluateExposureAgainstThreshold } from '../../lib/loadThresholdEngine';
+import { formatPlayerNumber } from '../../lib/positionalUtils';
 import { WhyModal } from './WhyModal';
 import { Search, Filter, HelpCircle, ShieldAlert, Activity } from 'lucide-react';
 
@@ -42,7 +43,7 @@ export const MonitorSubTab: React.FC<MonitorSubTabProps> = ({
               {targetContext} CONTEXT
             </span>
           </div>
-          <h2 className="text-2xl font-black text-white mt-1">{player.displayName} (#{player.number})</h2>
+          <h2 className="text-2xl font-black text-white mt-1">{player.displayName} ({formatPlayerNumber(player.number)})</h2>
           <p className="text-xs text-zinc-400 mt-1">
             Real-time session exposure tracking relative to individual P50, P90, and P95 thresholds.
           </p>

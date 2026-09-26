@@ -7,6 +7,7 @@ import { CoachViewSubTab } from './thresholds/CoachViewSubTab';
 import { BackToBackSubTab } from './thresholds/BackToBackSubTab';
 import { MinutesDensitySubTab } from './thresholds/MinutesDensitySubTab';
 import { WeeklyRollingSubTab } from './thresholds/WeeklyRollingSubTab';
+import { formatPlayerNumber } from '../lib/positionalUtils';
 import { Target, Activity, Users, ShieldAlert, Repeat, Clock, Calendar } from 'lucide-react';
 
 interface LoadThresholdsViewProps {
@@ -87,7 +88,7 @@ export const LoadThresholdsView: React.FC<LoadThresholdsViewProps> = ({
             >
               {players.map((p) => (
                 <option key={p.id} value={p.id}>
-                  #{p.number} {p.displayName} ({p.position})
+                  {formatPlayerNumber(p.number)} {p.displayName} ({p.position})
                 </option>
               ))}
             </select>
@@ -219,7 +220,9 @@ export const LoadThresholdsView: React.FC<LoadThresholdsViewProps> = ({
       {activeSubTab === 'B2B_MONITOR' && selectedPlayer && (
         <BackToBackSubTab
           player={selectedPlayer}
+          players={players}
           records={records}
+          onSelectPlayer={setSelectedPlayerId}
         />
       )}
 

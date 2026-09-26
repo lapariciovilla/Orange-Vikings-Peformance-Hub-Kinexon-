@@ -20,7 +20,11 @@ import { Player, SessionMeta, PlayerSessionRecord } from './types';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
-  const [currentDate, setCurrentDate] = useState<string>('2026-08-11');
+  const [currentDate, setCurrentDate] = useState<string>(() => {
+    const s = DataStore.getSessionsMeta();
+    const sorted = [...s].sort((a, b) => b.date.localeCompare(a.date));
+    return sorted[0]?.date || '2026-08-11';
+  });
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('p4'); // #8 Ryuji Aoki
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -35,15 +39,18 @@ export default function App() {
     const currentSessions = DataStore.getSessionsMeta();
     const currentRecords = DataStore.getPlayerRecords();
 
+    const sortedSessions = [...currentSessions].sort((a, b) => b.date.localeCompare(a.date));
+
     setRoster(currentRoster);
-    setSessions(currentSessions);
+    setSessions(sortedSessions);
     setRecords(currentRecords);
 
-    // If currentDate has no session, pick the latest session date if available
-    if (currentSessions.length > 0) {
-      const match = currentSessions.find((s) => s.date === currentDate);
+    // Always default to chronologically latest valid session in the database
+    if (sortedSessions.length > 0) {
+      const latestDate = sortedSessions[0].date;
+      const match = sortedSessions.find((s) => s.date === currentDate);
       if (!match) {
-        setCurrentDate(currentSessions[0].date);
+        setCurrentDate(latestDate);
       }
     }
   };

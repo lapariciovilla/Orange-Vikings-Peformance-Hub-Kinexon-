@@ -2,6 +2,7 @@ import React from 'react';
 import { Player, CoreMetrics, PlayerSessionRecord } from '../../types';
 import { CORE_METRIC_KEYS, METRIC_LABELS } from '../../lib/contextBaseline';
 import { calculateAllPlayerThresholds, evaluateExposureAgainstThreshold } from '../../lib/loadThresholdEngine';
+import { formatPlayerNumber } from '../../lib/positionalUtils';
 import { ShieldAlert, Info, Activity, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface CoachViewSubTabProps {
@@ -52,7 +53,7 @@ export const CoachViewSubTab: React.FC<CoachViewSubTabProps> = ({
           <span className="text-[10px] font-black uppercase text-orange-400 tracking-wider">
             GAME LOAD TARGETS — COACHING SUMMARY
           </span>
-          <h2 className="text-2xl font-black text-white mt-1">{selectedPlayer.displayName} (#{selectedPlayer.number})</h2>
+          <h2 className="text-2xl font-black text-white mt-1">{selectedPlayer.displayName} ({formatPlayerNumber(selectedPlayer.number)})</h2>
           <div className="flex items-center space-x-3 mt-1 text-xs text-zinc-400 font-mono">
             <span>Position: <strong className="text-zinc-200">{selectedPlayer.position}</strong></span>
             <span>•</span>
@@ -70,7 +71,7 @@ export const CoachViewSubTab: React.FC<CoachViewSubTabProps> = ({
           >
             {players.map((p) => (
               <option key={p.id} value={p.id}>
-                #{p.number} {p.displayName} ({p.position})
+                {formatPlayerNumber(p.number)} {p.displayName} ({p.position})
               </option>
             ))}
           </select>

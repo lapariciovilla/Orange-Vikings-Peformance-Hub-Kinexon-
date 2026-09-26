@@ -70,6 +70,12 @@ export function getPositionalGroup(player: {
 export const getPositionGroup = getPositionalGroup;
 
 
+export function formatPlayerNumber(numStr?: string | number | null): string {
+  if (numStr === undefined || numStr === null) return '';
+  const clean = String(numStr).replace(/#/g, '').trim();
+  return clean ? `#${clean}` : '';
+}
+
 /**
  * Formats any numerical value as a rounded whole number.
  * NEVER display decimals.
