@@ -74,7 +74,7 @@ export const Header: React.FC<HeaderProps> = ({
           className="bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1 transition-colors shadow-sm"
         >
           <Plus className="w-4 h-4 stroke-[3]" />
-          <span className="hidden sm:inline">IMPORT KINEXON</span>
+          <span className="hidden sm:inline">IMPORT CSV</span>
           <span className="sm:hidden">IMPORT</span>
         </button>
       </div>

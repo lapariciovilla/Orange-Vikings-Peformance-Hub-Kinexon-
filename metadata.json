@@ -1,6 +1,6 @@
 {
-  "name": "Orange Vikings KINEXON",
-  "description": "Orange Vikings KINEXON — Advanced Athlete Load Monitoring & Analytics System",
+  "name": "Orange Vikings Performance Hub",
+  "description": "Orange Vikings Performance Hub — Advanced Athlete Load Monitoring & Analytics System",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

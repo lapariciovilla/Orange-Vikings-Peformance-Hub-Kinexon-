@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Player, CoreMetrics, PlayerSessionRecord } from '../../types';
-import { CORE_METRIC_KEYS, METRIC_LABELS } from '../../lib/contextBaseline';
-import { calculateAllPlayerThresholds, evaluateExposureAgainstThreshold } from '../../lib/loadThresholdEngine';
+import { CORE_METRIC_KEYS, METRIC_LABELS, isGameSession } from '../../lib/contextBaseline';
+import { calculateAllPlayerThresholds, evaluateExposureAgainstThreshold, findBackToBackGamePairs } from '../../lib/loadThresholdEngine';
 import { formatPlayerNumber } from '../../lib/positionalUtils';
 import { WhyModal } from './WhyModal';
-import { Search, Filter, HelpCircle, ShieldAlert, Activity } from 'lucide-react';
+import { HelpCircle, Calendar, Repeat, ShieldAlert } from 'lucide-react';
 
 interface MonitorSubTabProps {
   player: Player;
   records: PlayerSessionRecord[];
-  targetContext: 'GAME' | 'PRACTICE';
+  targetContext: 'GAME' | 'PRACTICE' | 'POST_B2B_PRACTICE';
 }
 
 export const MonitorSubTab: React.FC<MonitorSubTabProps> = ({
@@ -19,20 +19,41 @@ export const MonitorSubTab: React.FC<MonitorSubTabProps> = ({
 }) => {
   const [selectedMetric, setSelectedMetric] = useState<keyof CoreMetrics | null>(null);
 
-  const thresholds = calculateAllPlayerThresholds(records, player, targetContext);
+  // Filter player sessions for this target context
+  const contextRecs = useMemo(() => {
+    return records
+      .filter((r) => {
+        if (r.player_id !== player.id) return false;
+        const isG = isGameSession(r.session_type, r.session_name);
+        return targetContext === 'GAME' ? isG : !isG;
+      })
+      .sort((a, b) => b.date.localeCompare(a.date)); // Chronologically latest first
+  }, [records, player.id, targetContext]);
 
-  // Filter player sessions
-  const contextRecs = records.filter((r) => {
-    if (r.player_id !== player.id) return false;
-    const isG = r.session_type.toUpperCase().includes('GAME') || r.session_name.toUpperCase().includes('GAME') || r.session_type.toUpperCase().includes('VS');
-    return targetContext === 'GAME' ? isG : !isG;
-  }).sort((a, b) => b.date.localeCompare(a.date));
+  const trueLatestRecord = contextRecs[0] || null;
 
-  const latestRecord = contextRecs[0] || null;
+  // Manual Session Picker State
+  const [selectedSessionDate, setSelectedSessionDate] = useState<string>('');
+
+  const activeRecord = useMemo(() => {
+    if (!selectedSessionDate) return trueLatestRecord;
+    return contextRecs.find((r) => r.date === selectedSessionDate) || trueLatestRecord;
+  }, [contextRecs, selectedSessionDate, trueLatestRecord]);
+
+  // Practice & Game thresholds remain strictly separate
+  const thresholdContext = targetContext === 'GAME' ? 'GAME' : 'PRACTICE';
+  const thresholds = calculateAllPlayerThresholds(records, player, thresholdContext);
+
+  // Preceding Back-to-Back weekend context for POST_B2B_PRACTICE
+  const b2bPairs = useMemo(() => {
+    return findBackToBackGamePairs(records, player.id);
+  }, [records, player.id]);
+
+  const latestB2B = b2bPairs[b2bPairs.length - 1] || null;
 
   return (
     <div className="space-y-6">
-      {/* Overview Context Header */}
+      {/* Overview Context Header & Session Selector */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2">
@@ -40,23 +61,79 @@ export const MonitorSubTab: React.FC<MonitorSubTabProps> = ({
               INDIVIDUAL LOAD EXPOSURE MONITOR
             </span>
             <span className="text-[10px] bg-orange-950/80 text-orange-400 font-bold px-2 py-0.5 rounded border border-orange-800">
-              {targetContext} CONTEXT
+              {targetContext.replace('_', ' ')} CONTEXT
             </span>
           </div>
-          <h2 className="text-2xl font-black text-white mt-1">{player.displayName} ({formatPlayerNumber(player.number)})</h2>
+          <h2 className="text-2xl font-black text-white mt-1">
+            {player.displayName} ({formatPlayerNumber(player.number)})
+          </h2>
           <p className="text-xs text-zinc-400 mt-1">
             Real-time session exposure tracking relative to individual P50, P90, and P95 thresholds.
           </p>
         </div>
 
-        {latestRecord && (
-          <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 text-right font-mono">
-            <span className="text-[10px] font-bold text-zinc-500 uppercase block font-sans">Active Game Session</span>
-            <span className="text-xs font-bold text-orange-400">{latestRecord.date}</span>
-            <span className="text-xs text-zinc-300 block font-sans truncate max-w-[220px]">{latestRecord.session_name}</span>
+        {/* Session Calendar / Date Selector */}
+        <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 flex items-center space-x-3">
+          <Calendar className="w-4 h-4 text-orange-400 shrink-0" />
+          <div>
+            <span className="text-[10px] font-bold text-zinc-500 uppercase block font-sans">
+              Selected Session Date:
+            </span>
+            <select
+              value={activeRecord?.date || ''}
+              onChange={(e) => setSelectedSessionDate(e.target.value)}
+              className="bg-transparent text-xs font-extrabold text-orange-400 outline-none cursor-pointer"
+            >
+              {contextRecs.map((r, idx) => (
+                <option key={r.session_id} value={r.date} className="bg-zinc-900 text-white">
+                  {r.date} — {r.session_name} {idx === 0 ? '(True Latest)' : ''}
+                </option>
+              ))}
+            </select>
           </div>
-        )}
+        </div>
       </div>
+
+      {/* Post Back-to-Back Context Card */}
+      {targetContext === 'POST_B2B_PRACTICE' && (
+        <div className="bg-gradient-to-r from-amber-950/90 via-zinc-900 to-zinc-900 border-2 border-amber-500/50 rounded-2xl p-5 space-y-3">
+          <div className="flex items-center justify-between border-b border-amber-500/30 pb-3">
+            <div className="flex items-center space-x-2">
+              <Repeat className="w-5 h-5 text-amber-400" />
+              <h3 className="text-sm font-black text-amber-300 uppercase tracking-wider">
+                Post Back-to-Back Practice Exposure
+              </h3>
+            </div>
+            <span className="text-xs font-bold bg-amber-500 text-zinc-950 px-2.5 py-0.5 rounded-full">
+              POST B2B RECOVERY
+            </span>
+          </div>
+
+          {latestB2B ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                <span className="text-[10px] text-zinc-500 font-bold uppercase block">Game 1</span>
+                <span className="font-bold text-white block mt-0.5">{latestB2B.date1} ({latestB2B.opponent1})</span>
+                <span className="text-[11px] text-amber-400 font-mono block mt-1">Min: {latestB2B.minutes1 ?? 'N/A'} | RPE: {latestB2B.rpe1 ?? 'N/A'}/10</span>
+              </div>
+              <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                <span className="text-[10px] text-zinc-500 font-bold uppercase block">Game 2</span>
+                <span className="font-bold text-white block mt-0.5">{latestB2B.date2} ({latestB2B.opponent2})</span>
+                <span className="text-[11px] text-amber-400 font-mono block mt-1">Min: {latestB2B.minutes2 ?? 'N/A'} | RPE: {latestB2B.rpe2 ?? 'N/A'}/10</span>
+              </div>
+              <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                <span className="text-[10px] text-zinc-500 font-bold uppercase block">Weekend Total Load</span>
+                <span className="font-bold text-orange-400 font-mono block mt-0.5">{(latestB2B.minutes1 || 0) + (latestB2B.minutes2 || 0)} Total Game Minutes</span>
+                <span className="text-[10px] text-zinc-400 block mt-1">Recovery Off-Day Context: Mon Off → Tue/Wed Practice</span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-amber-200/80 bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+              Evaluating practice exposure relative to player's individual historical baseline.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Main Exposure Monitor Table */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-xl">
@@ -80,7 +157,7 @@ export const MonitorSubTab: React.FC<MonitorSubTabProps> = ({
               {CORE_METRIC_KEYS.map((metricKey) => {
                 const t = thresholds[metricKey];
                 const meta = METRIC_LABELS[metricKey];
-                const currentVal = latestRecord ? latestRecord[metricKey] : null;
+                const currentVal = activeRecord ? activeRecord[metricKey] : null;
                 const evalResult = currentVal !== null ? evaluateExposureAgainstThreshold(currentVal, t) : null;
 
                 const highThresh = t.highThreshold;
@@ -231,7 +308,7 @@ export const MonitorSubTab: React.FC<MonitorSubTabProps> = ({
           player={player}
           metricKey={selectedMetric}
           threshold={thresholds[selectedMetric]}
-          currentValue={latestRecord ? latestRecord[selectedMetric] : null}
+          currentValue={activeRecord ? activeRecord[selectedMetric] : null}
         />
       )}
     </div>

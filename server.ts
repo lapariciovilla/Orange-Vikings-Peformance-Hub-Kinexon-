@@ -49,7 +49,14 @@ app.post("/api/ai/parse-gamesheet", async (req, res) => {
                   },
                 },
                 {
-                  text: "Extract all basketball player names, jersey numbers, and minutes played (MIN / MINS / MINUTES) from this game sheet / box score image. Return STRICTLY a JSON array of objects without markdown backticks: [{\"number\": \"8\", \"name\": \"Ryuji Aoki\", \"minutes\": 24}, ...]",
+                  text: `Extract all basketball player jersey numbers, player names (if available), and minutes played (MIN / MINS / MINUTES / M) from this official game box score / stat sheet image or document.
+The jersey NUMBER is the primary identifier because names may be in Japanese or abbreviated.
+Return STRICTLY a JSON array of objects without markdown backticks or extra text:
+[
+  {"number": "50", "name": "Mitchell Watt", "minutes": 28, "confidence": "HIGH"},
+  {"number": "8", "name": "Ryuji Aoki", "minutes": 22, "confidence": "HIGH"}
+]
+If minutes for a player are unclear or missing, set "minutes": 0 and "confidence": "LOW".`,
                 },
               ],
             },
@@ -105,8 +112,8 @@ Your primary user is Luis Aparicio Villa, Strength & Conditioning Coach.
 
 YOUR ROLE & RULES:
 1. You are a decision-support tool for S&C Coach Luis Aparicio Villa.
-2. Use ONLY the actual KINEXON data and calculated facts provided in the prompt context. NEVER invent missing values or fake historical baselines.
-3. Keep KINEXON terminology intact: Distance (m), Accumulated Acceleration Load, Deceleration Load, Jump Load, Mechanical Load.
+2. Use ONLY the actual tracking data and calculated facts provided in the prompt context. NEVER invent missing values or fake historical baselines.
+3. Keep core metric terminology intact: Distance (m), Accumulated Acceleration Load, Deceleration Load, Jump Load, Mechanical Load.
 4. SAFETY & MEDICAL RULES: Never diagnose injuries. Never dictate medical rest. Use professional S&C advice ("Consider monitoring volume", "Review recent load and RPE").
 5. Format response with clear section headings, bullet points, and high contrast stats.
 

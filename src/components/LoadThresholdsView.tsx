@@ -29,7 +29,7 @@ export const LoadThresholdsView: React.FC<LoadThresholdsViewProps> = ({
   records,
 }) => {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>(players[0]?.id || 'p1');
-  const [targetContext, setTargetContext] = useState<'GAME' | 'PRACTICE'>('GAME');
+  const [targetContext, setTargetContext] = useState<'GAME' | 'PRACTICE' | 'POST_B2B_PRACTICE'>('GAME');
   const [activeSubTab, setActiveSubTab] = useState<SubTabKey>('TARGET_CARDS');
 
   const selectedPlayer = players.find((p) => p.id === selectedPlayerId) || players[0];
@@ -49,19 +49,19 @@ export const LoadThresholdsView: React.FC<LoadThresholdsViewProps> = ({
           </div>
           <h1 className="text-3xl font-black text-white mt-1">Player Load Targets & Exposure</h1>
           <p className="text-xs text-zinc-400 mt-1 max-w-2xl">
-            Individualized P50, P90, and P95 exposure thresholds calculated from player-specific historical data across 8 core KINEXON metrics.
+            Individualized P50, P90, and P95 exposure thresholds calculated from player-specific historical data across 8 core tracking metrics.
           </p>
         </div>
 
         {/* Player & Context Controls */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Practice vs Game Context Toggle */}
+          {/* Practice vs Game vs Post B2B Context Toggle */}
           <div className="bg-zinc-950 p-1 rounded-xl border border-zinc-800 flex items-center space-x-1">
             <button
               onClick={() => setTargetContext('GAME')}
               className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${
                 targetContext === 'GAME'
-                  ? 'bg-orange-600 text-zinc-950 shadow-md'
+                  ? 'bg-purple-600 text-white shadow-md'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
@@ -76,6 +76,17 @@ export const LoadThresholdsView: React.FC<LoadThresholdsViewProps> = ({
               }`}
             >
               PRACTICE
+            </button>
+            <button
+              onClick={() => setTargetContext('POST_B2B_PRACTICE')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${
+                targetContext === 'POST_B2B_PRACTICE'
+                  ? 'bg-amber-500 text-zinc-950 shadow-md'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+              title="Practice load evaluation following a Back-to-Back game weekend"
+            >
+              POST B2B PRACTICE
             </button>
           </div>
 

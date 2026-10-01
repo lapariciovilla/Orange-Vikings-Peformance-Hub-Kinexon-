@@ -9,7 +9,7 @@ import { Search, Filter, HelpCircle, Users } from 'lucide-react';
 interface TeamOverviewSubTabProps {
   players: Player[];
   records: PlayerSessionRecord[];
-  targetContext: 'GAME' | 'PRACTICE';
+  targetContext: 'GAME' | 'PRACTICE' | 'POST_B2B_PRACTICE';
 }
 
 export const TeamOverviewSubTab: React.FC<TeamOverviewSubTabProps> = ({
@@ -126,7 +126,8 @@ export const TeamOverviewSubTab: React.FC<TeamOverviewSubTabProps> = ({
             </thead>
             <tbody className="divide-y divide-zinc-800/80 text-xs font-mono">
               {filteredPlayers.map((player) => {
-                const thresholds = calculateAllPlayerThresholds(records, player, targetContext);
+                const thresholdContext = targetContext === 'GAME' ? 'GAME' : 'PRACTICE';
+                const thresholds = calculateAllPlayerThresholds(records, player, thresholdContext);
                 const t = thresholds[selectedMetric];
 
                 const pRecs = records.filter((r) => {
@@ -257,7 +258,7 @@ export const TeamOverviewSubTab: React.FC<TeamOverviewSubTabProps> = ({
           onClose={() => setModalPlayer(null)}
           player={modalPlayer}
           metricKey={selectedMetric}
-          threshold={calculateAllPlayerThresholds(records, modalPlayer, targetContext)[selectedMetric]}
+          threshold={calculateAllPlayerThresholds(records, modalPlayer, targetContext === 'GAME' ? 'GAME' : 'PRACTICE')[selectedMetric]}
         />
       )}
     </div>

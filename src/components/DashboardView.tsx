@@ -158,7 +158,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="bg-orange-600 hover:bg-orange-500 text-zinc-950 font-extrabold px-4 py-2 rounded-lg text-xs flex items-center space-x-2 transition-all shadow-lg shadow-orange-950/40"
             >
               <Upload className="w-4 h-4" />
-              <span>IMPORT KINEXON SESSION</span>
+              <span>IMPORT CSV SESSION</span>
             </button>
           </div>
         </div>
@@ -348,7 +348,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 onClick={onNavigateImport}
                 className="text-orange-400 hover:underline font-bold"
               >
-                Import Kinexon CSV data to populate full load metrics
+                Import CSV data to populate full load metrics
               </button>
             </div>
           </div>
@@ -430,10 +430,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <HelpCircle className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
         <div>
           <div className="text-zinc-200 font-bold mb-1">
-            S&C Decision Support Principle — KINEXON External Load
+            S&C Decision Support Principle — External Load Metrics
           </div>
           <p className="leading-relaxed">
-            KINEXON metrics represent objective external movement exposures (Volume & Intensity). No single metric determines readiness or performance alone. Thresholds are continuously calculated relative to each player's individual historical baseline as sessions accumulate.
+            Tracking metrics represent objective external movement exposures (Volume & Intensity). No single metric determines readiness or performance alone. Thresholds are continuously calculated relative to each player's individual historical baseline as sessions accumulate.
           </p>
         </div>
       </div>

@@ -60,7 +60,7 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
   const todayStr = new Date().toISOString().split('T')[0];
   const [importDate, setImportDate] = useState<string>(todayStr);
   const [sessionType, setSessionType] = useState<SessionType>('Practice');
-  const [sessionName, setSessionName] = useState<string>('KINEXON Monitored Practice');
+  const [sessionName, setSessionName] = useState<string>('Monitored Practice');
 
   // Multi-CSV file tracking
   const [loadedFiles, setLoadedFiles] = useState<{ name: string; content: string }[]>([]);
@@ -69,9 +69,9 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Load sample Kinexon CSV
+  // Load sample tracking CSV
   const handleLoadSampleCSV = () => {
-    const sampleName = 'Sample_Kinexon_Preseason.csv';
+    const sampleName = 'Sample_Tracking_Preseason.csv';
     setFileName(sampleName);
     setLoadedFiles([{ name: sampleName, content: SAMPLE_KINEXON_CSV_CONTENT }]);
     setCsvText(SAMPLE_KINEXON_CSV_CONTENT);
@@ -152,7 +152,7 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
           combinedText.includes('b.league')
         ) {
           setSessionType('Game');
-          setSessionName('B.LEAGUE Official Game Session (KINEXON)');
+          setSessionName('B.LEAGUE Official Game Session (External Tracking)');
         } else if (combinedText.includes('conditioning') || combinedText.includes('s&c')) {
           setSessionType('Conditioning');
           setSessionName('Conditioning & High-Density Session');
@@ -301,7 +301,7 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
           </div>
           <h1 className="text-2xl font-black text-white tracking-tight flex items-center space-x-2">
             <Upload className="w-6 h-6 text-orange-500" />
-            <span>IMPORT KINEXON CSV SESSION</span>
+            <span>IMPORT CSV SESSION</span>
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
             Upload external-load reports, map parameters, and match Orange Vikings player numbers/aliases.
@@ -341,9 +341,9 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
         <div className="space-y-6">
           <div className="bg-zinc-900 border-2 border-dashed border-zinc-800 hover:border-orange-500/60 rounded-xl p-10 text-center transition-all bg-zinc-950/40">
             <FileSpreadsheet className="w-12 h-12 text-orange-500 mx-auto mb-3" />
-            <h3 className="text-lg font-black text-white">Upload KINEXON CSV File</h3>
+            <h3 className="text-lg font-black text-white">Upload CSV File</h3>
             <p className="text-xs text-zinc-400 max-w-md mx-auto mt-1 mb-6">
-              Drag & drop your exported Kinexon CSV report or browse your files.
+              Drag & drop your exported tracking CSV report or browse your files.
             </p>
 
             <div className="flex flex-wrap items-center justify-center gap-4">
@@ -364,7 +364,7 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
                 className="bg-zinc-800 hover:bg-zinc-700 text-orange-400 border border-orange-800/60 font-bold px-5 py-2.5 rounded-lg text-xs flex items-center space-x-2 transition-colors"
               >
                 <FileText className="w-4 h-4" />
-                <span>LOAD DEMO KINEXON PRESEASON CSV</span>
+                <span>LOAD DEMO TRACKING PRESEASON CSV</span>
               </button>
             </div>
           </div>
@@ -394,7 +394,7 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-6 shadow-xl">
           <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
             <div>
-              <h2 className="text-lg font-black text-white">MAP KINEXON COLUMNS</h2>
+              <h2 className="text-lg font-black text-white">MAP CSV COLUMNS</h2>
               <p className="text-xs text-zinc-400">
                 File: <span className="text-orange-400 font-bold">{fileName}</span> ({rawRows.length} detected rows)
               </p>

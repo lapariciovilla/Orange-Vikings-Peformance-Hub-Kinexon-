@@ -49,7 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     { id: 'dashboard', label: "TODAY'S LOAD", icon: LayoutDashboard },
     { id: 'thresholds', label: 'LOAD THRESHOLDS', icon: Target, highlight: true },
-    { id: 'import', label: 'IMPORT KINEXON CSV', icon: Upload },
+    { id: 'import', label: 'IMPORT CSV', icon: Upload },
     { id: 'games', label: 'GAME LOAD', icon: Trophy },
     { id: 'calendar', label: 'MONTHLY CALENDAR', icon: CalendarDays },
     { id: 'reports', label: 'S&C REPORT GENERATOR', icon: FileText },
@@ -80,7 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               PERFORMANCE HUB
             </div>
             <div className="text-[10px] text-zinc-400 font-bold mt-0.5">
-              2026–27 KINEXON S&C
+              2026–27 PERFORMANCE S&C
             </div>
           </div>
         </div>

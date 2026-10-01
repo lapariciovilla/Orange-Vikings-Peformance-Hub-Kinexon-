@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { Player, CoreMetrics } from '../types';
+import { Player, CoreMetrics, PlayerSessionRecord } from '../types';
 import { DataStore } from '../lib/dataStore';
-import { getPositionalGroup, formatWholeNumber } from '../lib/positionalUtils';
+import { getPositionalGroup, formatWholeNumber, formatPlayerNumber } from '../lib/positionalUtils';
+import { CORE_METRIC_KEYS, METRIC_LABELS } from '../lib/contextBaseline';
+import { calculateAllPlayerThresholds, evaluateExposureAgainstThreshold } from '../lib/loadThresholdEngine';
 import { SessionCalendarPicker } from './SessionCalendarPicker';
 import {
   FileText,
@@ -16,6 +18,8 @@ import {
   Trophy,
   Activity,
   Layers,
+  ShieldAlert,
+  AlertTriangle,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -76,6 +80,102 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
   const scopedRecords = useMemo(() => {
     return allRecords.filter((r) => scopedSessionIds.has(r.session_id));
   }, [allRecords, scopedSessionIds]);
+
+  // Player Threshold & Traffic-Light Status Summary Calculation (Synthesized & Visual)
+  const playerStatuses = useMemo(() => {
+    return scopedRecords.map((r) => {
+      const playerObj = roster.find((p) => p.id === r.player_id) || {
+        id: r.player_id,
+        displayName: r.player_name,
+        number: r.player_number,
+        position: r.position,
+      };
+
+      const isGame = r.session_type === 'Game' || (r.session_name || '').toLowerCase().includes('vs');
+      const targetCtx = isGame ? 'GAME' : 'PRACTICE';
+      const thresholds = calculateAllPlayerThresholds(allRecords, playerObj as Player, targetCtx);
+
+      let statusRank = 1; // 1 = GREEN, 2 = YELLOW, 3 = RED, 0 = BLUE
+      let topMetricLabel = 'ALL CORE METRICS';
+      let deviationText = 'WITHIN TYPICAL RANGE';
+      let statusTag = 'WITHIN TYPICAL RANGE';
+      let coachingAction = 'Normal exposure';
+      let maxPctDiff = 0;
+
+      let underloadedCount = 0;
+      let maxUnderloadPct = 0;
+      let topUnderloadedLabel = '';
+
+      CORE_METRIC_KEYS.forEach((mKey) => {
+        const val = r[mKey];
+        if (val === null || val === undefined) return;
+        const t = thresholds[mKey];
+        const ev = evaluateExposureAgainstThreshold(val, t);
+        if (!ev) return;
+
+        const p90 = t.highThreshold;
+        const typical = t.typicalTarget;
+
+        if (ev.status === 'VERY_HIGH_HISTORICAL' || (p90 && val >= p90)) {
+          statusRank = 3;
+          const pctAboveP90 = p90 && p90 > 0 ? Math.round(((val - p90) / p90) * 100) : 15;
+          if (pctAboveP90 > maxPctDiff || topMetricLabel === 'ALL CORE METRICS') {
+            maxPctDiff = pctAboveP90;
+            topMetricLabel = METRIC_LABELS[mKey].label.toUpperCase();
+            deviationText = `+${Math.max(1, pctAboveP90)}% ABOVE P90`;
+            statusTag = 'HIGH HISTORICAL EXPOSURE';
+            coachingAction = 'Limit additional high-intensity exposure';
+          }
+        } else if (ev.status === 'HIGH_EXPOSURE' || ev.status === 'ABOVE_TYPICAL') {
+          if (statusRank < 3) statusRank = 2;
+          const pctAboveTypical = typical && typical > 0 ? Math.round(((val - typical) / typical) * 100) : 10;
+          if (pctAboveTypical > maxPctDiff || topMetricLabel === 'ALL CORE METRICS') {
+            maxPctDiff = pctAboveTypical;
+            topMetricLabel = METRIC_LABELS[mKey].label.toUpperCase();
+            deviationText = `+${Math.max(1, pctAboveTypical)}% ABOVE TYPICAL`;
+            statusTag = 'ELEVATED EXPOSURE';
+            coachingAction = 'Review additional court volume';
+          }
+        } else if (ev.status === 'BELOW_TYPICAL') {
+          if (typical && typical > 0 && val < typical * 0.8) {
+            underloadedCount++;
+            const pctBelow = Math.round(((typical - val) / typical) * 100);
+            if (pctBelow > maxUnderloadPct) {
+              maxUnderloadPct = pctBelow;
+              topUnderloadedLabel = METRIC_LABELS[mKey].label.toUpperCase();
+            }
+          }
+        }
+      });
+
+      if (statusRank === 1 && underloadedCount >= 2 && maxUnderloadPct >= 15) {
+        statusRank = 0; // BLUE
+        topMetricLabel = topUnderloadedLabel || 'EXTERNAL WORKLOAD';
+        deviationText = `-${maxUnderloadPct}% BELOW TYPICAL`;
+        statusTag = 'UNDER TYPICAL EXPOSURE';
+        coachingAction = 'Consider compensatory loading';
+      }
+
+      const colorKey: 'RED' | 'YELLOW' | 'GREEN' | 'BLUE' =
+        statusRank === 3 ? 'RED' : statusRank === 2 ? 'YELLOW' : statusRank === 0 ? 'BLUE' : 'GREEN';
+
+      const iconSymbol = colorKey === 'RED' ? '🔴' : colorKey === 'YELLOW' ? '🟡' : colorKey === 'BLUE' ? '🔵' : '🟢';
+
+      return {
+        record: r,
+        player: playerObj,
+        colorKey,
+        iconSymbol,
+        metricLabel: topMetricLabel,
+        deviationText,
+        statusTag,
+        coachingAction,
+        RPE: r.RPE,
+        gameMinutes: r.game_minutes,
+        durationMin: r.duration_min,
+      };
+    });
+  }, [scopedRecords, roster, allRecords]);
 
   // Compute team averages for ALL 8 core metrics
   const totalCount = scopedRecords.length;
@@ -454,6 +554,75 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
                 {execSummary}
               </div>
             )}
+          </div>
+
+          {/* Section 1.5: THRESHOLD / EXPOSURE STATUS SUMMARY (SYNTHESIZED VISUAL CARDS) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-zinc-800 print:border-zinc-300 pb-2">
+              <h2 className="text-xs font-black text-orange-400 print:text-orange-700 uppercase tracking-wider flex items-center space-x-1.5">
+                <ShieldAlert className="w-4 h-4 text-orange-500" />
+                <span>2. THRESHOLD / EXPOSURE STATUS SUMMARY (COACH DECISION SUPPORT)</span>
+              </h2>
+              <div className="flex items-center space-x-2 text-[10px] font-black">
+                <span className="bg-rose-950/80 print:bg-rose-100 text-rose-300 print:text-rose-800 px-2 py-0.5 rounded border border-rose-800 print:border-rose-300">
+                  🔴 RED: {playerStatuses.filter((s) => s.colorKey === 'RED').length}
+                </span>
+                <span className="bg-amber-950/80 print:bg-amber-100 text-amber-300 print:text-amber-800 px-2 py-0.5 rounded border border-amber-800 print:border-amber-300">
+                  🟡 YELLOW: {playerStatuses.filter((s) => s.colorKey === 'YELLOW').length}
+                </span>
+                <span className="bg-emerald-950/80 print:bg-emerald-100 text-emerald-400 print:text-emerald-800 px-2 py-0.5 rounded border border-emerald-800 print:border-emerald-300">
+                  🟢 GREEN: {playerStatuses.filter((s) => s.colorKey === 'GREEN').length}
+                </span>
+                <span className="bg-blue-950/80 print:bg-blue-100 text-blue-300 print:text-blue-800 px-2 py-0.5 rounded border border-blue-800 print:border-blue-300">
+                  🔵 BLUE: {playerStatuses.filter((s) => s.colorKey === 'BLUE').length}
+                </span>
+              </div>
+            </div>
+
+            {/* Compact Visual Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs font-mono">
+              {playerStatuses.map((item) => (
+                <div
+                  key={`compact-${item.record.session_id}-${item.record.player_id}`}
+                  className={`p-3 rounded-xl border flex flex-col justify-between space-y-2 ${
+                    item.colorKey === 'RED'
+                      ? 'bg-rose-950/40 print:bg-rose-50 border-rose-800 print:border-rose-300'
+                      : item.colorKey === 'YELLOW'
+                      ? 'bg-amber-950/40 print:bg-amber-50 border-amber-800 print:border-amber-300'
+                      : item.colorKey === 'BLUE'
+                      ? 'bg-blue-950/40 print:bg-blue-50 border-blue-800 print:border-blue-300'
+                      : 'bg-zinc-900 print:bg-zinc-50 border-zinc-800 print:border-zinc-300'
+                  }`}
+                >
+                  <div className="flex items-start space-x-2">
+                    <span className="text-base leading-none pt-0.5">{item.iconSymbol}</span>
+                    <div className="truncate flex-1">
+                      <div className="font-black text-white print:text-black text-xs truncate">
+                        {formatPlayerNumber(item.record.player_number)} {item.record.player_name}
+                      </div>
+                      <div className="text-[10px] font-extrabold text-orange-400 print:text-orange-700 tracking-wider mt-0.5 truncate">
+                        {item.metricLabel}
+                      </div>
+                      <div className="text-[10px] text-zinc-300 print:text-zinc-800 font-extrabold mt-0.5">
+                        {item.deviationText}
+                      </div>
+                      <div className="text-[9px] text-zinc-400 print:text-zinc-600 font-bold uppercase mt-0.5">
+                        {item.statusTag}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-1 border-t border-zinc-800/60 print:border-zinc-300 flex items-center justify-between text-[9px]">
+                    <span className="font-bold text-zinc-200 print:text-zinc-800 bg-zinc-950/80 print:bg-zinc-200 px-2 py-0.5 rounded">
+                      {item.coachingAction}
+                    </span>
+                    <span className="text-zinc-500 font-mono">
+                      {item.gameMinutes ? `${item.gameMinutes}m` : ''} {item.RPE ? `RPE ${item.RPE}/10` : ''}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Section 2: Player Top Performers & Rankings */}
