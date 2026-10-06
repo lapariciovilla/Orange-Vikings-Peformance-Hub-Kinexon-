@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { Player, PlayerSessionRecord } from '../types';
 import { TargetCardSubTab } from './thresholds/TargetCardSubTab';
 import { MonitorSubTab } from './thresholds/MonitorSubTab';
+import { GameMinutesExposureSubTab } from './thresholds/GameMinutesExposureSubTab';
 import { TeamOverviewSubTab } from './thresholds/TeamOverviewSubTab';
 import { CoachViewSubTab } from './thresholds/CoachViewSubTab';
 import { BackToBackSubTab } from './thresholds/BackToBackSubTab';
 import { MinutesDensitySubTab } from './thresholds/MinutesDensitySubTab';
 import { WeeklyRollingSubTab } from './thresholds/WeeklyRollingSubTab';
 import { formatPlayerNumber } from '../lib/positionalUtils';
-import { Target, Activity, Users, ShieldAlert, Repeat, Clock, Calendar } from 'lucide-react';
+import { Target, Activity, Users, ShieldAlert, Repeat, Clock, Calendar, Sliders } from 'lucide-react';
 
 interface LoadThresholdsViewProps {
   players: Player[];
@@ -18,6 +19,7 @@ interface LoadThresholdsViewProps {
 type SubTabKey =
   | 'TARGET_CARDS'
   | 'EXPOSURE_MONITOR'
+  | 'GAME_MINUTES_EXPOSURE'
   | 'TEAM_OVERVIEW'
   | 'COACH_VIEW'
   | 'B2B_MONITOR'
@@ -134,6 +136,18 @@ export const LoadThresholdsView: React.FC<LoadThresholdsViewProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveSubTab('GAME_MINUTES_EXPOSURE')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-extrabold text-xs whitespace-nowrap transition-all ${
+            activeSubTab === 'GAME_MINUTES_EXPOSURE'
+              ? 'bg-purple-950/90 text-purple-300 border border-purple-700 shadow-lg shadow-purple-950/50'
+              : 'text-purple-400 hover:text-white hover:bg-zinc-900 border border-purple-900/50'
+          }`}
+        >
+          <Sliders className="w-4 h-4 text-purple-400" />
+          <span>Game Minutes & Exposure</span>
+        </button>
+
+        <button
           onClick={() => setActiveSubTab('TEAM_OVERVIEW')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-extrabold text-xs whitespace-nowrap transition-all ${
             activeSubTab === 'TEAM_OVERVIEW'
@@ -208,6 +222,15 @@ export const LoadThresholdsView: React.FC<LoadThresholdsViewProps> = ({
           player={selectedPlayer}
           records={records}
           targetContext={targetContext}
+        />
+      )}
+
+      {activeSubTab === 'GAME_MINUTES_EXPOSURE' && selectedPlayer && (
+        <GameMinutesExposureSubTab
+          player={selectedPlayer}
+          players={players}
+          records={records}
+          onSelectPlayer={setSelectedPlayerId}
         />
       )}
 
