@@ -94,6 +94,29 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
       const isGame = r.session_type === 'Game' || (r.session_name || '').toLowerCase().includes('vs');
       const targetCtx = isGame ? 'GAME' : 'PRACTICE';
       const thresholds = calculateAllPlayerThresholds(allRecords, playerObj as Player, targetCtx);
+      const medicalStatus = DataStore.getLatestPlayerStatus(playerObj.id);
+
+      // --- SMART TRAFFIC LIGHT LOW PLAYING TIME SAFEGUARD ---
+      const isLowMinutes = isGame
+        ? (r.game_minutes !== null && r.game_minutes !== undefined && r.game_minutes > 0 && r.game_minutes < 6.0)
+        : (r.duration_min !== null && r.duration_min !== undefined && r.duration_min > 0 && r.duration_min < 12.0);
+
+      if (isLowMinutes) {
+        return {
+          record: r,
+          player: playerObj,
+          colorKey: 'GREY' as const,
+          iconSymbol: '⚪',
+          metricLabel: 'LIMITED PLAYING TIME',
+          deviationText: `${r.game_minutes ?? r.duration_min} MIN LOGGED`,
+          statusTag: 'LIMITED PLAYING TIME — INTERPRET WITH CAUTION',
+          coachingAction: 'Caution: rate metrics inflated by short duration',
+          RPE: r.RPE,
+          gameMinutes: r.game_minutes,
+          durationMin: r.duration_min,
+          medicalStatus,
+        };
+      }
 
       let statusRank = 1; // 1 = GREEN, 2 = YELLOW, 3 = RED, 0 = BLUE
       let topMetricLabel = 'ALL CORE METRICS';
@@ -156,7 +179,7 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
         coachingAction = 'Consider compensatory loading';
       }
 
-      const colorKey: 'RED' | 'YELLOW' | 'GREEN' | 'BLUE' =
+      const colorKey: 'RED' | 'YELLOW' | 'GREEN' | 'BLUE' | 'GREY' =
         statusRank === 3 ? 'RED' : statusRank === 2 ? 'YELLOW' : statusRank === 0 ? 'BLUE' : 'GREEN';
 
       const iconSymbol = colorKey === 'RED' ? '🔴' : colorKey === 'YELLOW' ? '🟡' : colorKey === 'BLUE' ? '🔵' : '🟢';
@@ -173,6 +196,7 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
         RPE: r.RPE,
         gameMinutes: r.game_minutes,
         durationMin: r.duration_min,
+        medicalStatus,
       };
     });
   }, [scopedRecords, roster, allRecords]);
@@ -563,7 +587,7 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
                 <ShieldAlert className="w-4 h-4 text-orange-500" />
                 <span>2. THRESHOLD / EXPOSURE STATUS SUMMARY (COACH DECISION SUPPORT)</span>
               </h2>
-              <div className="flex items-center space-x-2 text-[10px] font-black">
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-black">
                 <span className="bg-rose-950/80 print:bg-rose-100 text-rose-300 print:text-rose-800 px-2 py-0.5 rounded border border-rose-800 print:border-rose-300">
                   🔴 RED: {playerStatuses.filter((s) => s.colorKey === 'RED').length}
                 </span>
@@ -576,6 +600,11 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
                 <span className="bg-blue-950/80 print:bg-blue-100 text-blue-300 print:text-blue-800 px-2 py-0.5 rounded border border-blue-800 print:border-blue-300">
                   🔵 BLUE: {playerStatuses.filter((s) => s.colorKey === 'BLUE').length}
                 </span>
+                {playerStatuses.some((s) => s.colorKey === 'GREY') && (
+                  <span className="bg-zinc-800 print:bg-zinc-200 text-amber-300 print:text-amber-800 px-2 py-0.5 rounded border border-zinc-700 print:border-zinc-400">
+                    ⚪ LIMITED TIME: {playerStatuses.filter((s) => s.colorKey === 'GREY').length}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -591,6 +620,8 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
                       ? 'bg-amber-950/40 print:bg-amber-50 border-amber-800 print:border-amber-300'
                       : item.colorKey === 'BLUE'
                       ? 'bg-blue-950/40 print:bg-blue-50 border-blue-800 print:border-blue-300'
+                      : item.colorKey === 'GREY'
+                      ? 'bg-zinc-900 print:bg-zinc-100 border-amber-800/80 print:border-amber-400'
                       : 'bg-zinc-900 print:bg-zinc-50 border-zinc-800 print:border-zinc-300'
                   }`}
                 >
@@ -609,6 +640,28 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
                       <div className="text-[9px] text-zinc-400 print:text-zinc-600 font-bold uppercase mt-0.5">
                         {item.statusTag}
                       </div>
+                      {item.medicalStatus && (
+                        <div className="flex flex-wrap items-center gap-1 mt-1 pt-1 border-t border-zinc-800/40">
+                          {item.medicalStatus.clearance_status !== 'FULL_CLEARANCE' && (
+                            <span className={`text-[8px] font-black px-1.5 py-0.2 rounded border ${
+                              item.medicalStatus.clearance_status === 'MODIFIED'
+                                ? 'bg-amber-950 text-amber-300 border-amber-800'
+                                : item.medicalStatus.clearance_status === 'RTP'
+                                ? 'bg-orange-950 text-orange-300 border-orange-800'
+                                : item.medicalStatus.clearance_status === 'INJURED'
+                                ? 'bg-rose-950 text-rose-300 border-rose-800'
+                                : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                            }`}>
+                              {item.medicalStatus.clearance_status === 'MODIFIED' ? 'MODIFIED' : item.medicalStatus.clearance_status === 'RTP' ? 'RTP' : item.medicalStatus.clearance_status === 'INJURED' ? 'OUT' : 'PENDING'}
+                            </span>
+                          )}
+                          {item.medicalStatus.soreness_body_area && item.medicalStatus.soreness_body_area !== 'None' && (
+                            <span className="text-[8px] font-bold text-amber-300 bg-zinc-950 px-1 py-0.2 rounded border border-amber-900/50 truncate">
+                              {item.medicalStatus.soreness_body_area} ({item.medicalStatus.soreness_score}/10)
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 

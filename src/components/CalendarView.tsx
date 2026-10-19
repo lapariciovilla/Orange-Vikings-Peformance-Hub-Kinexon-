@@ -403,7 +403,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ roster }) => {
             </div>
           ) : (
             <div className="text-xs text-zinc-500 py-16 text-center">
-              No official Kinexon session recorded on this date.
+              No official tracking session recorded on this date.
               <br />
               (Rest / Active Recovery Day)
             </div>

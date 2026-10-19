@@ -8,8 +8,9 @@ import { CoachViewSubTab } from './thresholds/CoachViewSubTab';
 import { BackToBackSubTab } from './thresholds/BackToBackSubTab';
 import { MinutesDensitySubTab } from './thresholds/MinutesDensitySubTab';
 import { WeeklyRollingSubTab } from './thresholds/WeeklyRollingSubTab';
+import { PlayerStatusInjurySubTab } from './thresholds/PlayerStatusInjurySubTab';
 import { formatPlayerNumber } from '../lib/positionalUtils';
-import { Target, Activity, Users, ShieldAlert, Repeat, Clock, Calendar, Sliders } from 'lucide-react';
+import { Target, Activity, Users, ShieldAlert, Repeat, Clock, Calendar, Sliders, Stethoscope } from 'lucide-react';
 
 interface LoadThresholdsViewProps {
   players: Player[];
@@ -20,6 +21,7 @@ type SubTabKey =
   | 'TARGET_CARDS'
   | 'EXPOSURE_MONITOR'
   | 'GAME_MINUTES_EXPOSURE'
+  | 'PLAYER_STATUS_INJURY'
   | 'TEAM_OVERVIEW'
   | 'COACH_VIEW'
   | 'B2B_MONITOR'
@@ -148,6 +150,18 @@ export const LoadThresholdsView: React.FC<LoadThresholdsViewProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveSubTab('PLAYER_STATUS_INJURY')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-extrabold text-xs whitespace-nowrap transition-all ${
+            activeSubTab === 'PLAYER_STATUS_INJURY'
+              ? 'bg-orange-600 text-zinc-950 font-black shadow-md shadow-orange-950/40'
+              : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+          }`}
+        >
+          <Stethoscope className="w-4 h-4" />
+          <span>Player Medical Status & Injury</span>
+        </button>
+
+        <button
           onClick={() => setActiveSubTab('TEAM_OVERVIEW')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-extrabold text-xs whitespace-nowrap transition-all ${
             activeSubTab === 'TEAM_OVERVIEW'
@@ -204,7 +218,7 @@ export const LoadThresholdsView: React.FC<LoadThresholdsViewProps> = ({
           }`}
         >
           <Calendar className="w-4 h-4" />
-          <span>Weekly Exposure Gaps</span>
+          <span>Acute & Chronic Workload (EWMA & 3/7/14/28d)</span>
         </button>
       </div>
 
@@ -230,6 +244,14 @@ export const LoadThresholdsView: React.FC<LoadThresholdsViewProps> = ({
           player={selectedPlayer}
           players={players}
           records={records}
+          onSelectPlayer={setSelectedPlayerId}
+        />
+      )}
+
+      {activeSubTab === 'PLAYER_STATUS_INJURY' && (
+        <PlayerStatusInjurySubTab
+          players={players}
+          selectedPlayerId={selectedPlayerId}
           onSelectPlayer={setSelectedPlayerId}
         />
       )}

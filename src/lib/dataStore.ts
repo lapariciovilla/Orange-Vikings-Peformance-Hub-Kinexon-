@@ -11,6 +11,8 @@ import {
   MetricFlag,
   SessionFlagSummary,
   FlagStatus,
+  PlayerStatusAssessment,
+  StaffClearanceStatus,
 } from '../types';
 import {
   INITIAL_ROSTER,
@@ -18,6 +20,7 @@ import {
   INITIAL_PLAYER_RECORDS,
   DEFAULT_SETTINGS,
   INITIAL_RPE_ENTRIES,
+  INITIAL_PLAYER_STATUS_ASSESSMENTS,
 } from '../data/initialData';
 
 const STORAGE_KEYS = {
@@ -27,6 +30,7 @@ const STORAGE_KEYS = {
   RPE_ENTRIES: 'ov_rpe_entries_v2',
   SETTINGS: 'ov_settings_v1',
   AUDIT_LOGS: 'ov_audit_logs_v2',
+  PLAYER_STATUS: 'ov_player_status_assessments_v1',
 };
 
 // Helper for local storage with initial fallback and non-destructive legacy key support
@@ -566,13 +570,94 @@ export class DataStore {
     };
   }
 
-  // Evaluate Flag for a specific metric vs context-aware baseline
+  // ====================================================
+  // S&C PLAYER STATUS, INJURY & CLEARANCE ASSESSMENTS
+  // ====================================================
+
+  static getPlayerStatusAssessments(playerId?: string): PlayerStatusAssessment[] {
+    const all = getStored<PlayerStatusAssessment[]>(STORAGE_KEYS.PLAYER_STATUS, INITIAL_PLAYER_STATUS_ASSESSMENTS);
+    if (!playerId) {
+      return [...all].sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.timestamp.localeCompare(a.timestamp));
+    }
+    return all
+      .filter((a) => a.player_id === playerId)
+      .sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.timestamp.localeCompare(a.timestamp));
+  }
+
+  static getLatestPlayerStatus(playerId: string): PlayerStatusAssessment {
+    const list = this.getPlayerStatusAssessments(playerId);
+    if (list.length > 0) {
+      return list[0];
+    }
+    const roster = this.getRoster();
+    const player = roster.find((p) => p.id === playerId);
+    // Explicit Unknown: missing information must remain explicitly unknown, never assumed fully fit
+    return {
+      id: `status_${playerId}_unknown`,
+      player_id: playerId,
+      player_name: player?.displayName || 'Unknown Athlete',
+      player_number: player?.number || '#0',
+      date: new Date().toISOString().split('T')[0],
+      timestamp: new Date().toISOString(),
+      assessed_by: 'Pending S&C Assessment',
+      clearance_status: 'UNKNOWN',
+      wellness_score: null,
+      rpe_score: null,
+      soreness_score: null,
+      soreness_body_area: null,
+      has_active_injury: false,
+      injury_type: null,
+      injury_date: null,
+      affected_side: 'N/A',
+      rtp_stage: 'UNKNOWN',
+      medical_restrictions: 'Status explicitly unknown — pending S&C/medical staff assessment',
+      max_minutes_restriction: null,
+      notes: 'No dated assessment logged for this athlete. Requires staff evaluation prior to competition.',
+    };
+  }
+
+  static addPlayerStatusAssessment(data: Omit<PlayerStatusAssessment, 'id' | 'timestamp'>): PlayerStatusAssessment {
+    const all = getStored<PlayerStatusAssessment[]>(STORAGE_KEYS.PLAYER_STATUS, INITIAL_PLAYER_STATUS_ASSESSMENTS);
+    const newAssessment: PlayerStatusAssessment = {
+      ...data,
+      id: `status_${data.player_id}_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+    };
+    all.unshift(newAssessment);
+    setStored(STORAGE_KEYS.PLAYER_STATUS, all);
+    this.addAuditLog(
+      'PLAYER_STATUS_UPDATE',
+      `Recorded S&C status for ${data.player_name || data.player_id}: Clearance=${data.clearance_status}, Soreness=${data.soreness_score ?? 'N/A'}/5 (${data.soreness_body_area || 'None'})`
+    );
+    return newAssessment;
+  }
+
+  static updatePlayerStatusAssessment(id: string, updates: Partial<PlayerStatusAssessment>): PlayerStatusAssessment | null {
+    const all = getStored<PlayerStatusAssessment[]>(STORAGE_KEYS.PLAYER_STATUS, INITIAL_PLAYER_STATUS_ASSESSMENTS);
+    const idx = all.findIndex((a) => a.id === id);
+    if (idx === -1) return null;
+    all[idx] = { ...all[idx], ...updates, timestamp: new Date().toISOString() };
+    setStored(STORAGE_KEYS.PLAYER_STATUS, all);
+    this.addAuditLog('PLAYER_STATUS_EDIT', `Edited assessment ${id} for player ${all[idx].player_name}`);
+    return all[idx];
+  }
+
+  // ====================================================
+  // SMART TRAFFIC LIGHTS & LOW PLAYING TIME SAFEGUARDS
+  // ====================================================
+
+  /**
+   * Evaluates Flag for a specific metric vs context-aware baseline.
+   * Includes smart safeguards: Never classifies rate metrics (e.g. Accel/min) as RED
+   * when playing time is low (2-5 min) and total volume is low.
+   */
   static evaluateMetricFlag(
     playerId: string,
     currentValue: number | null,
     metric: keyof CoreMetrics | 'RPE',
     sessionType?: string,
-    sessionName?: string
+    sessionName?: string,
+    exposureContext?: { game_minutes?: number | null; duration_min?: number | null; total_distance?: number | null }
   ): MetricFlag {
     const settings = this.getSettings();
     const baselineInfo = this.calculatePlayerBaseline(playerId, metric, sessionType, sessionName);
@@ -619,6 +704,21 @@ export class DataStore {
 
     const label = metricLabels[metric] || metric;
 
+    // --- SMART TRAFFIC LIGHT LOW PLAYING TIME CHECK ---
+    const isPerMinMetric = metric === 'accumulated_acceleration_load_per_min' || metric === 'deceleration_load_per_min';
+    const minutes = exposureContext?.game_minutes ?? exposureContext?.duration_min;
+
+    if (isPerMinMetric && minutes !== null && minutes !== undefined && minutes > 0 && minutes < 6.0) {
+      return {
+        metric,
+        status: 'LIMITED_PLAYING_TIME',
+        currentValue,
+        baselineValue: baseline,
+        pctChange,
+        reason: `LIMITED PLAYING TIME — INTERPRET WITH CAUTION (${label} is mathematically sensitive to low playing time of ${minutes} min; total external volume remains low).`,
+      };
+    }
+
     if (pctChange > settings.red_threshold_pct) {
       return {
         metric,
@@ -649,8 +749,15 @@ export class DataStore {
     }
   }
 
-  // Get full session flag summary for a player record
+  // Get full session flag summary for a player record with Smart Traffic Lights
   static getSessionFlagSummary(record: PlayerSessionRecord): SessionFlagSummary {
+    const isGame = (record.session_type || '').toLowerCase() === 'game' || (record.session_name || '').toLowerCase().includes('vs');
+    const exposureCtx = {
+      game_minutes: record.game_minutes,
+      duration_min: record.duration_min,
+      total_distance: record.distance_m,
+    };
+
     const metrics: (keyof CoreMetrics)[] = [
       'distance_m',
       'accumulated_acceleration_load',
@@ -660,29 +767,43 @@ export class DataStore {
     ];
 
     const flags: MetricFlag[] = metrics.map((m) =>
-      this.evaluateMetricFlag(record.player_id, record[m], m, record.session_type, record.session_name)
+      this.evaluateMetricFlag(record.player_id, record[m], m, record.session_type, record.session_name, exposureCtx)
     );
 
     if (record.RPE !== undefined && record.RPE !== null) {
-      flags.push(this.evaluateMetricFlag(record.player_id, record.RPE, 'RPE', record.session_type, record.session_name));
+      flags.push(this.evaluateMetricFlag(record.player_id, record.RPE, 'RPE', record.session_type, record.session_name, exposureCtx));
     }
+
+    // Check if player has low playing time (e.g. 2-5 min in game or <12 min in practice)
+    const isLowMinutes = isGame
+      ? (record.game_minutes !== null && record.game_minutes !== undefined && record.game_minutes > 0 && record.game_minutes < 6.0)
+      : (record.duration_min !== null && record.duration_min !== undefined && record.duration_min > 0 && record.duration_min < 12.0);
 
     const redFlags = flags.filter((f) => f.status === 'RED');
     const yellowFlags = flags.filter((f) => f.status === 'YELLOW');
     const insufficientFlags = flags.filter((f) => f.status === 'INSUFFICIENT_HISTORY');
+    const limitedFlags = flags.filter((f) => f.status === 'LIMITED_PLAYING_TIME');
 
     let overallStatus: FlagStatus = 'GREEN';
-    if (redFlags.length > 0) {
+
+    if (isLowMinutes) {
+      // Never classify a player as RED simply because per-minute metrics are high after 2-5 minutes
+      overallStatus = 'LIMITED_PLAYING_TIME';
+    } else if (redFlags.length > 0) {
       overallStatus = 'RED';
     } else if (yellowFlags.length > 0) {
       overallStatus = 'YELLOW';
+    } else if (limitedFlags.length > 0) {
+      overallStatus = 'LIMITED_PLAYING_TIME';
     } else if (insufficientFlags.length === flags.length) {
       overallStatus = 'INSUFFICIENT_HISTORY';
     }
 
-    const triggerReasons = flags
-      .filter((f) => f.status === 'RED' || f.status === 'YELLOW')
-      .map((f) => f.reason);
+    const triggerReasons = isLowMinutes
+      ? [`LIMITED PLAYING TIME — INTERPRET WITH CAUTION: ${record.player_name} logged only ${record.game_minutes ?? record.duration_min} minutes. Per-minute rates are mathematically elevated while overall total volume is low.`]
+      : flags
+          .filter((f) => f.status === 'RED' || f.status === 'YELLOW' || f.status === 'LIMITED_PLAYING_TIME')
+          .map((f) => f.reason);
 
     return {
       overallStatus,
@@ -698,6 +819,8 @@ export class DataStore {
     setStored(STORAGE_KEYS.PLAYER_RECORDS, INITIAL_PLAYER_RECORDS);
     setStored(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS);
     setStored(STORAGE_KEYS.RPE_ENTRIES, INITIAL_RPE_ENTRIES);
+    setStored(STORAGE_KEYS.PLAYER_STATUS, INITIAL_PLAYER_STATUS_ASSESSMENTS);
     this.addAuditLog('RESET_DATA', 'Reset database to official August 11, 2026 preseason initial state');
   }
 }
+

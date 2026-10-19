@@ -269,7 +269,7 @@ export function evaluateExposureAgainstThreshold(
 }
 
 /**
- * Minute Management Analysis: Minutes vs KINEXON Load
+ * Minute Management Analysis: Minutes vs External Load
  */
 export interface MinuteLoadEstimate {
   metric: keyof CoreMetrics;

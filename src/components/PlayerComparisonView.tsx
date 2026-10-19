@@ -127,7 +127,7 @@ export const PlayerComparisonView: React.FC<PlayerComparisonViewProps> = ({ play
             <span>PLAYER COMPARISON</span>
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
-            Compare 2 to 4 Orange Vikings athletes across KINEXON external-load metrics and RPE.
+            Compare 2 to 4 Orange Vikings athletes across external-load tracking metrics and RPE.
           </p>
         </div>
 

@@ -376,7 +376,7 @@ export const BackToBackSubTab: React.FC<BackToBackSubTabProps> = ({
                       </div>
                     </div>
 
-                    {/* Table of 8 KINEXON Metrics for this Pair */}
+                    {/* Table of 8 External Load Metrics for this Pair */}
                     <div className="overflow-x-auto rounded-xl border border-zinc-800">
                       <table className="w-full text-left font-mono text-xs">
                         <thead>

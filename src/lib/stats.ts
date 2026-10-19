@@ -1,5 +1,5 @@
 /**
- * Orange Vikings KINEXON Statistical Analysis Engine
+ * Orange Vikings Statistical Analysis Engine
  * Implements deterministic scientific statistical functions for athlete load monitoring.
  */
 

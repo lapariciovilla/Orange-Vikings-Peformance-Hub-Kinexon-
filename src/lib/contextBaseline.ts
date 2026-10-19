@@ -39,6 +39,7 @@ export type TrafficLightStatus =
   | 'NORMAL'
   | 'BELOW_TYPICAL'
   | 'UNUSUALLY_LOW'
+  | 'LIMITED_PLAYING_TIME'
   | 'INSUFFICIENT_DATA';
 
 export interface ContextEvaluationResult {
@@ -246,7 +247,8 @@ export function evaluateContextMetric(
   currentValue: number | null,
   metric: keyof CoreMetrics | 'RPE',
   targetSessionType?: string,
-  targetSessionName?: string
+  targetSessionName?: string,
+  exposureContext?: { game_minutes?: number | null; duration_min?: number | null; total_distance?: number | null }
 ): ContextEvaluationResult {
   const meta = METRIC_DISPLAY_INFO[metric] || { label: String(metric), unit: '', color: '#38bdf8' };
   const baseline = calculateContextBaseline(playerId, metric, targetSessionType, targetSessionName);
@@ -271,6 +273,30 @@ export function evaluateContextMetric(
       exposureGapPct: null,
       potentialAdditionalLoading: false,
       loadingSignalText: `No value recorded.`,
+    };
+  }
+
+  // --- SMART TRAFFIC LIGHT LOW PLAYING TIME SAFEGUARD ---
+  const isPerMinMetric = metric === 'accumulated_acceleration_load_per_min' || metric === 'deceleration_load_per_min';
+  const minutes = exposureContext?.game_minutes ?? exposureContext?.duration_min;
+  if (isPerMinMetric && minutes !== null && minutes !== undefined && minutes > 0 && minutes < 6.0) {
+    return {
+      metric,
+      metricLabel: meta.label,
+      unit: meta.unit,
+      currentValue,
+      contextType: targetCtx,
+      contextLabel,
+      baseline,
+      pctChange: baseline.mean ? Number((((currentValue - baseline.mean) / baseline.mean) * 100).toFixed(1)) : null,
+      zScore: null,
+      percentileRank: null,
+      status: 'LIMITED_PLAYING_TIME',
+      flagColor: 'GRAY',
+      reasonWhy: `LIMITED PLAYING TIME — INTERPRET WITH CAUTION (${meta.label} is sensitive to short playing time of ${minutes} min; rate metrics are mathematically inflated while total volume is low).`,
+      exposureGapPct: null,
+      potentialAdditionalLoading: false,
+      loadingSignalText: `Limited playing time (${minutes} min). Interpret per-minute intensity with caution.`,
     };
   }
 
@@ -372,6 +398,16 @@ export function evaluateFullSessionContext(record: PlayerSessionRecord): Session
   const targetCtx = getSessionContextType(record.session_type, record.session_name);
   const contextLabel = targetCtx === 'GAME' ? 'Previous Games' : targetCtx === 'PRACTICE' ? 'Previous Practices' : 'Historical Sessions';
 
+  const exposureCtx = {
+    game_minutes: record.game_minutes,
+    duration_min: record.duration_min,
+    total_distance: record.distance_m,
+  };
+
+  const isLowMinutes = targetCtx === 'GAME'
+    ? (record.game_minutes !== null && record.game_minutes !== undefined && record.game_minutes > 0 && record.game_minutes < 6.0)
+    : (record.duration_min !== null && record.duration_min !== undefined && record.duration_min > 0 && record.duration_min < 12.0);
+
   const coreMetricKeys: (keyof CoreMetrics)[] = [
     'distance_m',
     'accumulated_acceleration_load',
@@ -384,12 +420,12 @@ export function evaluateFullSessionContext(record: PlayerSessionRecord): Session
   ];
 
   const evaluations: ContextEvaluationResult[] = coreMetricKeys.map((mKey) =>
-    evaluateContextMetric(record.player_id, record[mKey] ?? null, mKey, record.session_type, record.session_name)
+    evaluateContextMetric(record.player_id, record[mKey] ?? null, mKey, record.session_type, record.session_name, exposureCtx)
   );
 
   // Evaluate RPE if present
   if (record.RPE !== null && record.RPE !== undefined) {
-    evaluations.push(evaluateContextMetric(record.player_id, record.RPE, 'RPE', record.session_type, record.session_name));
+    evaluations.push(evaluateContextMetric(record.player_id, record.RPE, 'RPE', record.session_type, record.session_name, exposureCtx));
   }
 
   const overloaded = evaluations.filter((e) => e.status === 'UNUSUALLY_HIGH' || e.status === 'ABOVE_TYPICAL');
@@ -398,7 +434,11 @@ export function evaluateFullSessionContext(record: PlayerSessionRecord): Session
   let overallStatus: TrafficLightStatus = 'NORMAL';
   let overallFlagColor: 'RED' | 'YELLOW' | 'GREEN' | 'BLUE' | 'GRAY' = 'GREEN';
 
-  if (evaluations.some((e) => e.status === 'UNUSUALLY_HIGH')) {
+  if (isLowMinutes) {
+    // Smart traffic light safeguard: Low playing time must NEVER trigger RED
+    overallStatus = 'LIMITED_PLAYING_TIME';
+    overallFlagColor = 'GRAY';
+  } else if (evaluations.some((e) => e.status === 'UNUSUALLY_HIGH')) {
     overallStatus = 'UNUSUALLY_HIGH';
     overallFlagColor = 'RED';
   } else if (evaluations.some((e) => e.status === 'ABOVE_TYPICAL')) {
@@ -415,7 +455,9 @@ export function evaluateFullSessionContext(record: PlayerSessionRecord): Session
   const maxExposureGapPct = gapPcts.length > 0 ? Math.max(...gapPcts) : null;
 
   let summaryObservation = `Session performance evaluated relative to ${record.player_name}'s historical ${targetCtx.toLowerCase()} baseline.`;
-  if (overloaded.length > 0) {
+  if (isLowMinutes) {
+    summaryObservation = `LIMITED PLAYING TIME — INTERPRET WITH CAUTION: ${record.player_name} played only ${record.game_minutes ?? record.duration_min} minutes. Per-minute rates are mathematically sensitive to short duration while total physical workload is low.`;
+  } else if (overloaded.length > 0) {
     const topOver = overloaded[0];
     summaryObservation = `${record.player_name} logged elevated exposure in ${topOver.metricLabel} (+${topOver.pctChange}% vs ${targetCtx.toLowerCase()} baseline mean).`;
   } else if (underloaded.length > 0 && maxExposureGapPct !== null) {
@@ -424,9 +466,11 @@ export function evaluateFullSessionContext(record: PlayerSessionRecord): Session
     summaryObservation = `${record.player_name} performed strictly within expected individual ${targetCtx.toLowerCase()} baseline ranges across all monitored metrics.`;
   }
 
-  const loadingNeeded = underloaded.length >= 2 || (maxExposureGapPct !== null && maxExposureGapPct >= 15);
+  const loadingNeeded = !isLowMinutes && (underloaded.length >= 2 || (maxExposureGapPct !== null && maxExposureGapPct >= 15));
   let loadingMessage = 'Current exposure aligns with typical baseline targets. No compensation indicated.';
-  if (loadingNeeded) {
+  if (isLowMinutes) {
+    loadingMessage = `Low playing time (${record.game_minutes ?? record.duration_min} min). Total exposure is well below standard game demands. Review whether post-game conditioning or compensatory court work is scheduled.`;
+  } else if (loadingNeeded) {
     loadingMessage = `This player received lower-than-usual exposure in today's ${targetCtx.toLowerCase()} (${maxExposureGapPct}% exposure gap). POTENTIAL ADDITIONAL LOADING REVIEW: YES — S&C Coach Luis should review upcoming game schedule, playing minutes, and individual fatigue context before deciding whether to compensate.`;
   }
 
@@ -448,3 +492,4 @@ export function evaluateFullSessionContext(record: PlayerSessionRecord): Session
     },
   };
 }
+

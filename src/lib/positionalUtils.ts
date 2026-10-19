@@ -88,7 +88,7 @@ export function formatWholeNumber(val: number | null | undefined, fallback = '0'
 }
 
 /**
- * Parses Anaerobic Activity Time from Kinexon CSV exports.
+ * Parses Anaerobic Activity Time from tracking CSV exports.
  * Supports timestamp strings like "00:07:34" or "00:11:08" or "07:34",
  * as well as raw numeric values.
  * Reads first 2 as hours, next 2 as minutes, next 2 as seconds.

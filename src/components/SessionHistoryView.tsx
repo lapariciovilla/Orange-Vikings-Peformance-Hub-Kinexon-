@@ -106,7 +106,7 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="text-orange-500 text-xs font-black tracking-widest uppercase mb-1">
-            KINEXON SESSION TIMELINE
+            EXTERNAL LOAD SESSION TIMELINE
           </div>
           <h1 className="text-2xl font-black text-white tracking-tight flex items-center space-x-2">
             <CalendarIcon className="w-6 h-6 text-orange-500" />
@@ -134,7 +134,7 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
             <CalendarIcon className="w-8 h-8 text-zinc-600 mx-auto" />
             <p className="text-sm font-bold text-zinc-400">No session history records in database.</p>
             <p className="text-xs text-zinc-500">
-              Import a Kinexon CSV or add a session manually to start logging performance data for the 2026–2027 season.
+              Import a tracking CSV or add a session manually to start logging performance data for the 2026–2027 season.
             </p>
           </div>
         ) : (
@@ -162,7 +162,7 @@ export const SessionHistoryView: React.FC<SessionHistoryViewProps> = ({
                 </div>
 
                 <h3 className="text-base font-black text-white group-hover:text-orange-300 transition-colors">
-                  {session.session_name || 'KINEXON Monitored Session'}
+                  {session.session_name || 'External Load Monitored Session'}
                 </h3>
 
                 <div className="mt-4 pt-3 border-t border-zinc-800/80 grid grid-cols-2 gap-2 text-xs">

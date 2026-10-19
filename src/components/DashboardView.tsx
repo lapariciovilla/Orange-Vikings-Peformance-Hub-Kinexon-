@@ -233,6 +233,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         const redCount = flagSummaries.filter((s) => s.overallStatus === 'RED').length;
         const yellowCount = flagSummaries.filter((s) => s.overallStatus === 'YELLOW').length;
         const greenCount = flagSummaries.filter((s) => s.overallStatus === 'GREEN').length;
+        const limitedCount = flagSummaries.filter((s) => s.overallStatus === 'LIMITED_PLAYING_TIME').length;
 
         const redPlayers = records
           .filter((_, i) => flagSummaries[i].overallStatus === 'RED')
@@ -240,6 +241,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         const yellowPlayers = records
           .filter((_, i) => flagSummaries[i].overallStatus === 'YELLOW')
+          .map((r) => `${formatPlayerNumber(r.player_number)} ${r.player_name}`);
+
+        const limitedPlayers = records
+          .filter((_, i) => flagSummaries[i].overallStatus === 'LIMITED_PLAYING_TIME')
           .map((r) => `${formatPlayerNumber(r.player_number)} ${r.player_name}`);
 
         return (
@@ -258,7 +263,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
 
               {/* Status Badge Pills */}
-              <div className="flex items-center space-x-3 text-xs font-black">
+              <div className="flex flex-wrap items-center gap-2 text-xs font-black">
                 <span className="flex items-center space-x-1.5 bg-emerald-950/80 border border-emerald-800 text-emerald-400 px-3 py-1.5 rounded-lg">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   <span>{greenCount} GREEN</span>
@@ -271,6 +276,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <span className="w-2 h-2 rounded-full bg-rose-500" />
                   <span>{redCount} RED</span>
                 </span>
+                {limitedCount > 0 && (
+                  <span className="flex items-center space-x-1.5 bg-zinc-800 border border-zinc-700 text-amber-300 px-3 py-1.5 rounded-lg">
+                    <span className="w-2 h-2 rounded-full bg-amber-400" />
+                    <span>{limitedCount} LIMITED TIME</span>
+                  </span>
+                )}
               </div>
             </div>
 
@@ -295,6 +306,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </>
                 )}
               </p>
+              {limitedCount > 0 && (
+                <p className="text-[11px] text-zinc-400 border-t border-zinc-800/80 pt-2 mt-1">
+                  <strong className="text-amber-300 uppercase tracking-wider">Limited Playing Time ({limitedPlayers.join(', ')}):</strong> Athletes with &lt;6 minutes logged low total volume while per-minute rates are mathematically sensitive. Evaluated with caution rather than an unjustified RED alert.
+                </p>
+              )}
             </div>
           </div>
         );
@@ -360,7 +376,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 selectedRankMetric === 'distance_m' ? `${rawVal.toLocaleString()} m` : `${rawVal} au`;
               const barWidthPct = Math.min(100, Math.max(8, (rawVal / maxRankVal) * 100));
 
-              const flag = DataStore.evaluateMetricFlag(rec.player_id, rawVal, selectedRankMetric);
+              const flag = DataStore.evaluateMetricFlag(
+                rec.player_id,
+                rawVal,
+                selectedRankMetric,
+                rec.session_type,
+                rec.session_name,
+                {
+                  game_minutes: rec.game_minutes,
+                  duration_min: rec.duration_min,
+                  total_distance: rec.distance_m,
+                }
+              );
 
               return (
                 <div
@@ -398,8 +425,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
 
                   {/* Status Badge */}
-                  <div className="flex items-center justify-end space-x-2 md:w-48 shrink-0">
-                    {flag.status === 'INSUFFICIENT_HISTORY' ? (
+                  <div className="flex items-center justify-end space-x-2 md:w-56 shrink-0">
+                    {flag.status === 'LIMITED_PLAYING_TIME' ? (
+                      <span className="text-[10px] font-black text-amber-300 bg-zinc-900 border border-amber-800/80 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        LIMITED PLAYING TIME
+                      </span>
+                    ) : flag.status === 'INSUFFICIENT_HISTORY' ? (
                       <span className="text-[10px] font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2.5 py-1 rounded-full uppercase tracking-wider">
                         BASELINE BUILDING
                       </span>

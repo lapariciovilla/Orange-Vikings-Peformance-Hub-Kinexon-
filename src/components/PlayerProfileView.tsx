@@ -1,5 +1,12 @@
-import React, { useState } from 'react';
-import { Player, CoreMetrics, PlayerSessionRecord } from '../types';
+import React, { useState, useMemo } from 'react';
+import {
+  Player,
+  CoreMetrics,
+  PlayerSessionRecord,
+  PlayerStatusAssessment,
+  StaffClearanceStatus,
+  RTPStage,
+} from '../types';
 import { DataStore } from '../lib/dataStore';
 import { formatWholeNumber, formatPlayerNumber } from '../lib/positionalUtils';
 import {
@@ -46,6 +53,16 @@ import {
   Sparkles,
   Layers,
   Zap,
+  Stethoscope,
+  Shield,
+  ShieldAlert,
+  AlertTriangle,
+  HeartPulse,
+  Clock,
+  PlusCircle,
+  History,
+  FileEdit,
+  X,
 } from 'lucide-react';
 
 interface PlayerProfileViewProps {
@@ -106,6 +123,69 @@ function calculatePercentile(val: number, arr: number[]): number | null {
   return Math.round(((countBelow + 0.5 * countEqual) / arr.length) * 100);
 }
 
+const CLEARANCE_CONFIG: Record<
+  StaffClearanceStatus,
+  { label: string; badgeClass: string; icon: any; desc: string }
+> = {
+  FULL_CLEARANCE: {
+    label: 'Full Clearance',
+    badgeClass: 'bg-emerald-950/90 text-emerald-300 border-emerald-800',
+    icon: CheckCircle2,
+    desc: 'Unrestricted game & training participation',
+  },
+  MODIFIED: {
+    label: 'Modified / Restricted',
+    badgeClass: 'bg-amber-950/90 text-amber-300 border-amber-800',
+    icon: AlertTriangle,
+    desc: 'Subject to specific minutes or drill restrictions',
+  },
+  RTP: {
+    label: 'Return to Play (RTP)',
+    badgeClass: 'bg-orange-950/90 text-orange-300 border-orange-800',
+    icon: HeartPulse,
+    desc: 'Progressing through phased rehabilitation protocol',
+  },
+  INJURED: {
+    label: 'Out / Injured',
+    badgeClass: 'bg-rose-950/90 text-rose-300 border-rose-800',
+    icon: ShieldAlert,
+    desc: 'Unavailable for match play; receiving medical care',
+  },
+  UNKNOWN: {
+    label: 'Unknown (Pending Assessment)',
+    badgeClass: 'bg-zinc-800 text-zinc-400 border-zinc-700',
+    icon: AlertCircle,
+    desc: 'No assessment on record; never assumed fully fit',
+  },
+};
+
+const COMMON_BODY_AREAS = [
+  'Left Hamstring',
+  'Right Hamstring',
+  'Patellar Tendon',
+  'Left Ankle',
+  'Right Ankle',
+  'Left Quadriceps',
+  'Right Quadriceps',
+  'Groin / Adductor',
+  'Lower Back',
+  'Calf / Achilles',
+  'Shoulder',
+  'Hip Flexor',
+  'None',
+];
+
+const RTP_STAGES: { id: RTPStage; label: string }[] = [
+  { id: 'STAGE_1_ACUTE', label: 'Stage 1: Acute Protection & Symptom Management' },
+  { id: 'STAGE_2_LOW_INTENSITY', label: 'Stage 2: Low-Intensity Rehab & Non-Impact Movement' },
+  { id: 'STAGE_3_MODIFIED_NON_CONTACT', label: 'Stage 3: Modified Non-Contact Basketball Drills' },
+  { id: 'STAGE_4_FULL_CONTACT', label: 'Stage 4: Full Contact Team Practice' },
+  { id: 'STAGE_5_COMPETITION', label: 'Stage 5: Full Competition / Unrestricted Match Exposure' },
+  { id: 'CLEARED', label: 'Cleared — Post-Rehab Monitoring' },
+  { id: 'NOT_APPLICABLE', label: 'Not Applicable (No Injury)' },
+  { id: 'UNKNOWN', label: 'Unknown / Not Assessed' },
+];
+
 export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
   players,
   selectedPlayerId,
@@ -116,9 +196,91 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
   const [normMode, setNormMode] = useState<NormalizationMode>('TOTAL');
   const [lambda, setLambda] = useState<number>(0.2); // EWMA smoothing factor
 
+  // S&C Player Status & Medical Clearance State
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [statusRefreshKey, setStatusRefreshKey] = useState(0);
+
   const player = (players && players.length > 0)
     ? (players.find((p) => p.id === selectedPlayerId) || players[0])
     : null;
+
+  const latestStatus = useMemo(() => {
+    if (!player) return null;
+    return DataStore.getLatestPlayerStatus(player.id);
+  }, [player?.id, statusRefreshKey]);
+
+  const statusHistory = useMemo(() => {
+    if (!player) return [];
+    return DataStore.getPlayerStatusAssessments(player.id);
+  }, [player?.id, statusRefreshKey]);
+
+  // Assessment Form State
+  const [formClearance, setFormClearance] = useState<StaffClearanceStatus>('FULL_CLEARANCE');
+  const [formWellness, setFormWellness] = useState<string>('8');
+  const [formRPE, setFormRPE] = useState<string>('5');
+  const [formSoreness, setFormSoreness] = useState<string>('2');
+  const [formBodyArea, setFormBodyArea] = useState<string>('None');
+  const [formHasInjury, setFormHasInjury] = useState<boolean>(false);
+  const [formInjuryType, setFormInjuryType] = useState<string>('');
+  const [formInjuryDate, setFormInjuryDate] = useState<string>('');
+  const [formAffectedSide, setFormAffectedSide] = useState<'LEFT' | 'RIGHT' | 'BILATERAL' | 'CENTRAL' | 'N/A'>('N/A');
+  const [formRTPStage, setFormRTPStage] = useState<RTPStage>('NOT_APPLICABLE');
+  const [formRestrictions, setFormRestrictions] = useState<string>('Full team practice & game minutes');
+  const [formMaxMin, setFormMaxMin] = useState<string>('');
+  const [formNotes, setFormNotes] = useState<string>('');
+  const [formAssessor, setFormAssessor] = useState<string>('Luis Aparicio Villa (S&C Head)');
+  const [formDate, setFormDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  const handleOpenStatusModal = () => {
+    if (latestStatus) {
+      setFormClearance(latestStatus.clearance_status);
+      setFormWellness(latestStatus.wellness_score !== null && latestStatus.wellness_score !== undefined ? String(latestStatus.wellness_score) : '');
+      setFormRPE(latestStatus.rpe_score !== null && latestStatus.rpe_score !== undefined ? String(latestStatus.rpe_score) : '');
+      setFormSoreness(latestStatus.soreness_score !== null && latestStatus.soreness_score !== undefined ? String(latestStatus.soreness_score) : '');
+      setFormBodyArea(latestStatus.soreness_body_area || 'None');
+      setFormHasInjury(Boolean(latestStatus.has_active_injury));
+      setFormInjuryType(latestStatus.injury_type || '');
+      setFormInjuryDate(latestStatus.injury_date || '');
+      setFormAffectedSide((latestStatus.affected_side as any) || 'N/A');
+      setFormRTPStage((latestStatus.rtp_stage as RTPStage) || 'NOT_APPLICABLE');
+      setFormRestrictions(latestStatus.medical_restrictions || '');
+      setFormMaxMin(latestStatus.max_minutes_restriction !== null && latestStatus.max_minutes_restriction !== undefined ? String(latestStatus.max_minutes_restriction) : '');
+      setFormNotes(latestStatus.notes || '');
+      setFormAssessor(latestStatus.assessed_by || 'Luis Aparicio Villa (S&C Head)');
+      setFormDate(new Date().toISOString().split('T')[0]);
+    }
+    setIsStatusModalOpen(true);
+  };
+
+  const handleSaveAssessment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!player) return;
+
+    DataStore.addPlayerStatusAssessment({
+      player_id: player.id,
+      player_name: player.displayName,
+      player_number: player.number,
+      date: formDate,
+      assessed_by: formAssessor,
+      clearance_status: formClearance,
+      wellness_score: formWellness ? Number(formWellness) : null,
+      rpe_score: formRPE ? Number(formRPE) : null,
+      soreness_score: formSoreness ? Number(formSoreness) : null,
+      soreness_body_area: formBodyArea !== 'None' ? formBodyArea : null,
+      has_active_injury: formHasInjury,
+      injury_type: formHasInjury && formInjuryType ? formInjuryType : null,
+      injury_date: formHasInjury && formInjuryDate ? formInjuryDate : null,
+      affected_side: formAffectedSide,
+      rtp_stage: formRTPStage,
+      medical_restrictions: formRestrictions,
+      max_minutes_restriction: formMaxMin ? Number(formMaxMin) : null,
+      notes: formNotes,
+    });
+
+    setStatusRefreshKey((k) => k + 1);
+    setIsStatusModalOpen(false);
+  };
 
   if (!player) {
     return (
@@ -362,6 +524,175 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
         </div>
       </div>
 
+      {/* S&C PLAYER STATUS, CLEARANCE & INJURY HISTORY CARD */}
+      {latestStatus && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2.5 rounded-xl bg-orange-950/80 border border-orange-800 text-orange-400">
+                <Stethoscope className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-[10px] font-black uppercase text-orange-400 tracking-wider">
+                    S&C MEDICAL CLEARANCE & INJURY CONTEXT
+                  </span>
+                  <span className="text-[10px] text-zinc-500 font-mono font-bold">
+                    Last Assessed: {latestStatus.date}
+                  </span>
+                </div>
+                <h2 className="text-xl font-black text-white">Player Availability & Functional Status</h2>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className="bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-bold text-xs px-3 py-2 rounded-xl flex items-center space-x-1.5 transition-colors"
+              >
+                <History className="w-4 h-4 text-zinc-400" />
+                <span>History ({statusHistory.length})</span>
+              </button>
+              <button
+                onClick={handleOpenStatusModal}
+                className="bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black text-xs px-3.5 py-2 rounded-xl flex items-center space-x-1.5 shadow-md transition-colors"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>Log Assessment</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Clearance Status Badge & Overview Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Clearance Badge Card */}
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 space-y-2">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                STAFF CLEARANCE STATUS
+              </span>
+              <div className="flex items-center space-x-2">
+                {React.createElement(CLEARANCE_CONFIG[latestStatus.clearance_status].icon, {
+                  className: "w-5 h-5 text-orange-400 shrink-0",
+                })}
+                <span className={`text-xs font-black px-2.5 py-1 rounded-lg border ${CLEARANCE_CONFIG[latestStatus.clearance_status].badgeClass}`}>
+                  {CLEARANCE_CONFIG[latestStatus.clearance_status].label}
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400 font-medium">
+                {CLEARANCE_CONFIG[latestStatus.clearance_status].desc}
+              </p>
+            </div>
+
+            {/* Wellness Score Card */}
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 space-y-1">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                WELLNESS & READINESS
+              </span>
+              <div className="text-2xl font-black text-white">
+                {latestStatus.wellness_score !== null ? (
+                  <span className={latestStatus.wellness_score >= 8 ? 'text-emerald-400' : latestStatus.wellness_score >= 6 ? 'text-amber-400' : 'text-rose-400'}>
+                    {latestStatus.wellness_score} <span className="text-xs text-zinc-500">/ 10</span>
+                  </span>
+                ) : (
+                  <span className="text-xs text-zinc-500 italic font-normal">Pending Log</span>
+                )}
+              </div>
+              <div className="text-[10px] text-zinc-400">
+                Pre-session RPE: <strong className="text-purple-400">{latestStatus.rpe_score !== null ? `${latestStatus.rpe_score}/10` : 'None'}</strong>
+              </div>
+            </div>
+
+            {/* Soreness & Body Area */}
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 space-y-1">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                REPORTED MUSCLE SORENESS
+              </span>
+              <div className="text-2xl font-black text-white">
+                {latestStatus.soreness_score !== null ? (
+                  <span className={latestStatus.soreness_score <= 2 ? 'text-emerald-400' : latestStatus.soreness_score <= 5 ? 'text-amber-400' : 'text-rose-400'}>
+                    {latestStatus.soreness_score} <span className="text-xs text-zinc-500">/ 10</span>
+                  </span>
+                ) : (
+                  <span className="text-xs text-zinc-500 italic font-normal">None Logged</span>
+                )}
+              </div>
+              <div className="text-[10px] text-zinc-300 font-bold truncate">
+                Area: {latestStatus.soreness_body_area && latestStatus.soreness_body_area !== 'None' ? (
+                  <span className="text-amber-300">{latestStatus.soreness_body_area}</span>
+                ) : (
+                  <span className="text-zinc-500">No focal soreness</span>
+                )}
+              </div>
+            </div>
+
+            {/* RTP Stage & Restrictions */}
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 space-y-1">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                RTP STAGE / RESTRICTIONS
+              </span>
+              <div className="text-xs font-black text-orange-400 truncate">
+                {latestStatus.has_active_injury ? (
+                  <span>{latestStatus.injury_type || 'Active Rehab'} ({latestStatus.affected_side})</span>
+                ) : (
+                  <span className="text-emerald-400">No Active Injury</span>
+                )}
+              </div>
+              <div className="text-[11px] text-zinc-300 font-medium truncate" title={latestStatus.medical_restrictions || 'No restrictions'}>
+                {latestStatus.medical_restrictions || 'Full team clearance'}
+              </div>
+              {latestStatus.max_minutes_restriction && (
+                <div className="text-[10px] font-black text-amber-300">
+                  Cap: {latestStatus.max_minutes_restriction} min limit
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Clinical Notes & Assessor */}
+          <div className="bg-zinc-950 p-3.5 rounded-lg border border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="text-zinc-300">
+              <strong className="text-orange-400 uppercase text-[10px] tracking-wider block">Clinical Notes:</strong>
+              <p className="mt-0.5">{latestStatus.notes || 'No specific clinical observations logged for this athlete.'}</p>
+            </div>
+            <div className="text-[10px] text-zinc-500 font-mono sm:text-right shrink-0">
+              Assessor: <span className="text-zinc-300 font-bold">{latestStatus.assessed_by}</span>
+            </div>
+          </div>
+
+          {/* Historical Assessment Log Accordion */}
+          {showHistory && (
+            <div className="pt-2 border-t border-zinc-800 space-y-2">
+              <div className="text-xs font-black text-zinc-400 uppercase tracking-wider">
+                Historical Dated Assessments ({statusHistory.length}) — Immutable Audit Log
+              </div>
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {statusHistory.map((hist) => (
+                  <div key={hist.id} className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-white">{hist.date}</span>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${CLEARANCE_CONFIG[hist.clearance_status].badgeClass}`}>
+                          {CLEARANCE_CONFIG[hist.clearance_status].label}
+                        </span>
+                        {hist.soreness_body_area && hist.soreness_body_area !== 'None' && (
+                          <span className="text-[10px] bg-amber-950 text-amber-300 border border-amber-800 px-2 py-0.5 rounded">
+                            {hist.soreness_body_area} ({hist.soreness_score}/10)
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-400">{hist.notes || hist.medical_restrictions}</p>
+                    </div>
+                    <div className="text-[10px] text-zinc-500 font-mono text-right shrink-0">
+                      by {hist.assessed_by}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Context-Aware Baseline & Monitoring Status Banner */}
       {(() => {
         const contextEval = evaluateContextMetric(
@@ -369,7 +700,12 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
           currentVal,
           activeMetricTab,
           latestRecord?.session_type,
-          latestRecord?.session_name
+          latestRecord?.session_name,
+          {
+            game_minutes: latestRecord?.game_minutes,
+            duration_min: latestRecord?.duration_min,
+            total_distance: latestRecord?.distance_m,
+          }
         );
         const fullContext = latestRecord ? evaluateFullSessionContext(latestRecord) : null;
         const isGame = isGameSession(latestRecord?.session_type, latestRecord?.session_name);
@@ -399,7 +735,12 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
                 </div>
 
                 <div>
-                  {contextEval.flagColor === 'RED' ? (
+                  {contextEval.status === 'LIMITED_PLAYING_TIME' ? (
+                    <div className="flex items-center space-x-2 bg-zinc-950 border border-amber-600/90 text-amber-300 px-3.5 py-1.5 rounded-lg text-xs font-black">
+                      <Clock className="w-4 h-4 text-amber-400" />
+                      <span>LIMITED PLAYING TIME — INTERPRET WITH CAUTION</span>
+                    </div>
+                  ) : contextEval.flagColor === 'RED' ? (
                     <div className="flex items-center space-x-2 bg-rose-950/80 border border-rose-800 text-rose-300 px-3.5 py-1.5 rounded-lg text-xs font-black">
                       <AlertCircle className="w-4 h-4 text-rose-400" />
                       <span>UNUSUALLY HIGH EXPOSURE ({contextEval.pctChange ? `+${contextEval.pctChange}%` : ''})</span>
@@ -964,6 +1305,7 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
                 <th className="p-2.5">Date</th>
                 <th className="p-2.5">Type</th>
                 <th className="p-2.5">Denominator</th>
+                <th className="p-2.5 text-center">Workload Status</th>
                 <th className="p-2.5 text-right">Distance (m)</th>
                 <th className="p-2.5 text-right">Accel Load</th>
                 <th className="p-2.5 text-right">Decel Load</th>
@@ -979,6 +1321,12 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
                   ? (r.game_minutes ? `${r.game_minutes} played min` : 'Game min N/A')
                   : (r.duration_min ? `${r.duration_min} session min` : 'Duration N/A');
 
+                const flagSummary = DataStore.getSessionFlagSummary(r);
+                const maxFlagPct = flagSummary.flags.reduce(
+                  (max, f) => (f.pctChange && f.pctChange > max ? f.pctChange : max),
+                  0
+                );
+
                 return (
                   <tr key={`${r.session_id}-${r.player_id}`} className="hover:bg-zinc-800/40 transition-colors">
                     <td className="p-2.5 font-bold text-white">{r.date}</td>
@@ -988,6 +1336,25 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
                       </span>
                     </td>
                     <td className="p-2.5 text-zinc-400 font-semibold">{minutesText}</td>
+                    <td className="p-2.5 text-center">
+                      {flagSummary.overallStatus === 'LIMITED_PLAYING_TIME' ? (
+                        <span className="text-[9px] font-black text-amber-300 bg-zinc-900 border border-amber-800/80 px-2 py-0.5 rounded-full uppercase" title="Limited playing time — rate metrics interpreted with caution">
+                          LIMITED TIME
+                        </span>
+                      ) : flagSummary.overallStatus === 'RED' ? (
+                        <span className="text-[9px] font-black text-rose-300 bg-rose-950/80 border border-rose-800 px-2 py-0.5 rounded-full uppercase">
+                          UNUSUAL {maxFlagPct > 0 ? `(+${maxFlagPct}%)` : ''}
+                        </span>
+                      ) : flagSummary.overallStatus === 'YELLOW' ? (
+                        <span className="text-[9px] font-black text-amber-300 bg-amber-950/80 border border-amber-800 px-2 py-0.5 rounded-full uppercase">
+                          ELEVATED {maxFlagPct > 0 ? `(+${maxFlagPct}%)` : ''}
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-black text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2 py-0.5 rounded-full uppercase">
+                          NORMAL
+                        </span>
+                      )}
+                    </td>
                     <td className="p-2.5 text-right font-mono font-bold text-amber-400">
                       {r.distance_m !== null ? formatWholeNumber(r.distance_m) : 'N/A'}
                     </td>
@@ -1013,6 +1380,255 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* S&C STATUS ASSESSMENT MODAL */}
+      {isStatusModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 space-y-5">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-orange-950 text-orange-400 rounded-lg border border-orange-800">
+                  <Stethoscope className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-white">Record S&C Status & Injury Assessment</h3>
+                  <p className="text-xs text-zinc-400">
+                    {formatPlayerNumber(player.number)} {player.displayName} ({player.position}) • Dated Medical Log
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsStatusModalOpen(false)}
+                className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAssessment} className="space-y-4 text-xs">
+              {/* Date & Assessor */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 font-bold uppercase text-[10px] mb-1">Assessment Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={formDate}
+                    onChange={(e) => setFormDate(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2.5 text-white font-mono focus:border-orange-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 font-bold uppercase text-[10px] mb-1">Assessed By (Staff)</label>
+                  <input
+                    type="text"
+                    required
+                    value={formAssessor}
+                    onChange={(e) => setFormAssessor(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2.5 text-white focus:border-orange-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Clearance Status */}
+              <div>
+                <label className="block text-zinc-400 font-bold uppercase text-[10px] mb-1">Staff Clearance Status</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {(Object.keys(CLEARANCE_CONFIG) as StaffClearanceStatus[]).map((st) => (
+                    <button
+                      type="button"
+                      key={st}
+                      onClick={() => setFormClearance(st)}
+                      className={`p-2 rounded-lg border text-left font-bold transition-all ${
+                        formClearance === st
+                          ? `${CLEARANCE_CONFIG[st].badgeClass} shadow-md`
+                          : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                      }`}
+                    >
+                      <div className="text-[11px]">{CLEARANCE_CONFIG[st].label}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Wellness, RPE, Soreness */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-zinc-400 font-bold uppercase text-[10px] mb-1">Wellness Score (1-10)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    placeholder="e.g. 8"
+                    value={formWellness}
+                    onChange={(e) => setFormWellness(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2 text-white font-mono focus:border-orange-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 font-bold uppercase text-[10px] mb-1">Pre-Session RPE (1-10)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    placeholder="e.g. 5"
+                    value={formRPE}
+                    onChange={(e) => setFormRPE(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2 text-white font-mono focus:border-orange-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 font-bold uppercase text-[10px] mb-1">Muscle Soreness (1-10)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    placeholder="e.g. 3"
+                    value={formSoreness}
+                    onChange={(e) => setFormSoreness(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2 text-white font-mono focus:border-orange-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Body Area */}
+              <div>
+                <label className="block text-zinc-400 font-bold uppercase text-[10px] mb-1">Focal Body Area (Soreness / Tension)</label>
+                <select
+                  value={formBodyArea}
+                  onChange={(e) => setFormBodyArea(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2.5 text-white focus:border-orange-500 outline-none"
+                >
+                  {COMMON_BODY_AREAS.map((area) => (
+                    <option key={area} value={area}>{area}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Active Injury Section */}
+              <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 space-y-3">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="has-injury"
+                    checked={formHasInjury}
+                    onChange={(e) => setFormHasInjury(e.target.checked)}
+                    className="w-4 h-4 text-orange-500 bg-zinc-900 border-zinc-700 rounded focus:ring-orange-500"
+                  />
+                  <label htmlFor="has-injury" className="font-bold text-white text-xs cursor-pointer">
+                    Athlete Has Active / Monitored Injury or Rehab Protocol
+                  </label>
+                </div>
+
+                {formHasInjury && (
+                  <div className="space-y-3 pt-2 border-t border-zinc-800/80">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-zinc-400 font-bold uppercase text-[10px] mb-1">Injury Type</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Hamstring Strain"
+                          value={formInjuryType}
+                          onChange={(e) => setFormInjuryType(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2 text-white focus:border-orange-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-zinc-400 font-bold uppercase text-[10px] mb-1">Injury / Onset Date</label>
+                        <input
+                          type="date"
+                          value={formInjuryDate}
+                          onChange={(e) => setFormInjuryDate(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2 text-white font-mono focus:border-orange-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-zinc-400 font-bold uppercase text-[10px] mb-1">Affected Side</label>
+                        <select
+                          value={formAffectedSide}
+                          onChange={(e) => setFormAffectedSide(e.target.value as any)}
+                          className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2 text-white focus:border-orange-500 outline-none"
+                        >
+                          <option value="LEFT">Left</option>
+                          <option value="RIGHT">Right</option>
+                          <option value="BILATERAL">Bilateral</option>
+                          <option value="CENTRAL">Central</option>
+                          <option value="N/A">N/A</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-zinc-400 font-bold uppercase text-[10px] mb-1">RTP Stage</label>
+                      <select
+                        value={formRTPStage}
+                        onChange={(e) => setFormRTPStage(e.target.value as RTPStage)}
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2 text-white focus:border-orange-500 outline-none"
+                      >
+                        {RTP_STAGES.map((s) => (
+                          <option key={s.id} value={s.id}>{s.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Restrictions & Minutes Cap */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-zinc-400 font-bold uppercase text-[10px] mb-1">Medical / Drill Restrictions</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Max 20 min; no end-of-practice sprints"
+                    value={formRestrictions}
+                    onChange={(e) => setFormRestrictions(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2 text-white focus:border-orange-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 font-bold uppercase text-[10px] mb-1">Max Minutes Cap</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 22"
+                    value={formMaxMin}
+                    onChange={(e) => setFormMaxMin(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2 text-white font-mono focus:border-orange-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Clinical Notes */}
+              <div>
+                <label className="block text-zinc-400 font-bold uppercase text-[10px] mb-1">S&C Staff Clinical Notes</label>
+                <textarea
+                  rows={2}
+                  placeholder="Record observations, treatment performed, manual therapy, or specific recovery focus..."
+                  value={formNotes}
+                  onChange={(e) => setFormNotes(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2 text-white focus:border-orange-500 outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setIsStatusModalOpen(false)}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black rounded-xl shadow-lg transition-colors"
+                >
+                  Save Dated Assessment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

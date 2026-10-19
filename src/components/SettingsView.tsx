@@ -120,12 +120,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ roster, onRefresh })
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Orange_Vikings_KINEXON_Export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `Orange_Vikings_Load_Export_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
-    showToast('Exported KINEXON CSV dataset!');
+    showToast('Exported External Load CSV dataset!');
   };
 
   const handleResetData = () => {

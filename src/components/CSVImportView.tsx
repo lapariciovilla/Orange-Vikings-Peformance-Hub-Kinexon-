@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Papa from 'papaparse';
 import { Player, SessionType, SessionMeta, PlayerSessionRecord } from '../types';
 import { DataStore } from '../lib/dataStore';
-import { SAMPLE_KINEXON_CSV_CONTENT } from '../data/initialData';
+import { SAMPLE_EXTERNAL_LOAD_CSV_CONTENT } from '../data/initialData';
 import { parseAnaerobicTimeToMinutes } from '../lib/positionalUtils';
 import {
   Upload,
@@ -73,9 +73,9 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
   const handleLoadSampleCSV = () => {
     const sampleName = 'Sample_Tracking_Preseason.csv';
     setFileName(sampleName);
-    setLoadedFiles([{ name: sampleName, content: SAMPLE_KINEXON_CSV_CONTENT }]);
-    setCsvText(SAMPLE_KINEXON_CSV_CONTENT);
-    parseCSVContent(SAMPLE_KINEXON_CSV_CONTENT, sampleName);
+    setLoadedFiles([{ name: sampleName, content: SAMPLE_EXTERNAL_LOAD_CSV_CONTENT }]);
+    setCsvText(SAMPLE_EXTERNAL_LOAD_CSV_CONTENT);
+    parseCSVContent(SAMPLE_EXTERNAL_LOAD_CSV_CONTENT, sampleName);
   };
 
   // Handle multi-file drop/upload

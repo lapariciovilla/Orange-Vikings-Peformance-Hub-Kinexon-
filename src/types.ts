@@ -17,7 +17,7 @@ export interface Player {
   notes?: string;
 }
 
-// The 8 primary KINEXON external-load metrics
+// The 8 primary external-load tracking metrics
 export interface CoreMetrics {
   distance_m: number | null;
   accumulated_acceleration_load: number | null;
@@ -101,7 +101,7 @@ export interface IndividualBaseline {
   sampleSize: number;
 }
 
-export type FlagStatus = 'GREEN' | 'YELLOW' | 'RED' | 'INSUFFICIENT_HISTORY';
+export type FlagStatus = 'GREEN' | 'YELLOW' | 'RED' | 'LIMITED_PLAYING_TIME' | 'INSUFFICIENT_HISTORY';
 
 export interface MetricFlag {
   metric: keyof CoreMetrics | 'RPE';
@@ -155,6 +155,7 @@ export type ExposureStatus =
   | 'ABOVE_TYPICAL'
   | 'HIGH_EXPOSURE'
   | 'VERY_HIGH_HISTORICAL'
+  | 'LIMITED_PLAYING_TIME'
   | 'INSUFFICIENT_DATA';
 
 export interface PlayerMetricThreshold {
@@ -185,4 +186,63 @@ export interface PlayerMetricThreshold {
   confidenceLabel: DataConfidenceLabel;
   disclaimer: string | null;
 }
+
+// ====================================================
+// S&C PLAYER STATUS, INJURY & CLEARANCE DOMAIN MODEL
+// ====================================================
+
+export type StaffClearanceStatus =
+  | 'FULL_CLEARANCE'
+  | 'MODIFIED'
+  | 'RTP'
+  | 'INJURED'
+  | 'UNKNOWN';
+
+export type RTPStage =
+  | 'STAGE_1_ACUTE'
+  | 'STAGE_2_LOW_INTENSITY'
+  | 'STAGE_3_MODIFIED_NON_CONTACT'
+  | 'STAGE_4_FULL_CONTACT'
+  | 'STAGE_5_COMPETITION'
+  | 'CLEARED'
+  | 'NOT_APPLICABLE'
+  | 'UNKNOWN';
+
+export interface PlayerStatusAssessment {
+  id: string;
+  player_id: string;
+  player_name?: string;
+  player_number?: string;
+  date: string; // ISO YYYY-MM-DD
+  timestamp: string; // ISO datetime
+  assessed_by: string; // e.g. "Coach Luis Aparicio Villa (S&C)"
+  
+  // Clearance status
+  clearance_status: StaffClearanceStatus;
+  
+  // Daily Readiness & Perceived Strain
+  wellness_score?: number | null; // 1-5 scale (1=Poor/Fatigued, 5=Optimal)
+  rpe_score?: number | null; // 1-10 Borg CR10
+  
+  // Soreness & Localized Musculoskeletal Symptoms
+  soreness_score?: number | null; // 1-5 scale (1=None/Fresh, 5=Severe soreness)
+  soreness_body_area?: string | null; // e.g. "Left Hamstring", "Patellar Tendon", "Groin", "Lower Back", "Right Ankle", "None"
+  
+  // Injury Diagnostics & Tracking
+  has_active_injury: boolean;
+  injury_type?: string | null; // e.g. "Hamstring Strain", "Ankle Inversion Sprain", "Patellar Tendinopathy", "Contusion"
+  injury_date?: string | null; // ISO YYYY-MM-DD
+  affected_side?: 'LEFT' | 'RIGHT' | 'BILATERAL' | 'CENTRAL' | 'N/A';
+  
+  // Rehabilitation / RTP Stage
+  rtp_stage?: RTPStage | string | null;
+  
+  // Medical Restrictions & Minutes Limit
+  medical_restrictions?: string | null; // e.g. "Max 18 min game time", "No back-to-backs", "Non-contact shooting drills only", "None"
+  max_minutes_restriction?: number | null; // Explicit numeric minutes restriction if specified
+  
+  // Clinical / S&C Contextual Notes
+  notes?: string | null;
+}
+
 

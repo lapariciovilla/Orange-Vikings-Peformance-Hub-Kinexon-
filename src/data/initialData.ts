@@ -1,4 +1,4 @@
-import { Player, PlayerSessionRecord, SessionMeta, CoachSettings, RPEEntry } from '../types';
+import { Player, PlayerSessionRecord, SessionMeta, CoachSettings, RPEEntry, PlayerStatusAssessment } from '../types';
 
 export const INITIAL_ROSTER: Player[] = [
   {
@@ -818,7 +818,121 @@ export const INITIAL_RPE_ENTRIES: RPEEntry[] = [
   },
 ];
 
-// Sample CSV export content that coach Luis can copy/download to test Kinexon CSV import with all 8 core metrics
+// Initial dated S&C status assessments
+export const INITIAL_PLAYER_STATUS_ASSESSMENTS: PlayerStatusAssessment[] = [
+  {
+    id: 'status_p4_20260811',
+    player_id: 'p4',
+    player_name: 'Ryuji Aoki',
+    player_number: '#8',
+    date: '2026-08-11',
+    timestamp: '2026-08-11T09:00:00Z',
+    assessed_by: 'Coach Luis Aparicio Villa (S&C)',
+    clearance_status: 'FULL_CLEARANCE',
+    wellness_score: 4,
+    rpe_score: 5,
+    soreness_score: 1,
+    soreness_body_area: 'None',
+    has_active_injury: false,
+    injury_type: null,
+    injury_date: null,
+    affected_side: 'N/A',
+    rtp_stage: 'CLEARED',
+    medical_restrictions: 'Full clearance — Unrestricted game & practice participation',
+    max_minutes_restriction: null,
+    notes: 'Optimal movement mechanics and high readiness reported post-rest day.',
+  },
+  {
+    id: 'status_p2_20260811',
+    player_id: 'p2',
+    player_name: 'Takumi Furuno',
+    player_number: '#2',
+    date: '2026-08-11',
+    timestamp: '2026-08-11T09:15:00Z',
+    assessed_by: 'Coach Luis Aparicio Villa (S&C)',
+    clearance_status: 'MODIFIED',
+    wellness_score: 3,
+    rpe_score: 6,
+    soreness_score: 3,
+    soreness_body_area: 'Right Hamstring',
+    has_active_injury: true,
+    injury_type: 'Hamstring Tightness / Mild Strain',
+    injury_date: '2026-08-08',
+    affected_side: 'RIGHT',
+    rtp_stage: 'STAGE_4_FULL_CONTACT',
+    medical_restrictions: 'Max 22 min game exposure. Limit repetitive full-court sprint deceleration blocks.',
+    max_minutes_restriction: 22,
+    notes: 'Reported tightness at terminal swing phase. Responding well to soft-tissue mobilization and isometric hamstring bridges.',
+  },
+  {
+    id: 'status_p8_20260811',
+    player_id: 'p8',
+    player_name: 'Matt Haarms',
+    player_number: '#16',
+    date: '2026-08-11',
+    timestamp: '2026-08-11T09:20:00Z',
+    assessed_by: 'Coach Luis Aparicio Villa (S&C)',
+    clearance_status: 'FULL_CLEARANCE',
+    wellness_score: 4,
+    rpe_score: 5,
+    soreness_score: 2,
+    soreness_body_area: 'Patellar Tendon (bilateral mild fatigue)',
+    has_active_injury: false,
+    injury_type: null,
+    injury_date: null,
+    affected_side: 'BILATERAL',
+    rtp_stage: 'CLEARED',
+    medical_restrictions: 'Unrestricted — monitor landing volume on consecutive game days.',
+    max_minutes_restriction: null,
+    notes: 'Readiness high; routine tendon warm-up completed.',
+  },
+  {
+    id: 'status_p10_20260811',
+    player_id: 'p10',
+    player_name: 'Shaquille Hines',
+    player_number: '#44',
+    date: '2026-08-11',
+    timestamp: '2026-08-11T09:30:00Z',
+    assessed_by: 'Coach Luis Aparicio Villa (S&C)',
+    clearance_status: 'MODIFIED',
+    wellness_score: 3,
+    rpe_score: 6,
+    soreness_score: 3,
+    soreness_body_area: 'Left Ankle',
+    has_active_injury: true,
+    injury_type: 'Lateral Ankle Sprain (Grade 1)',
+    injury_date: '2026-08-07',
+    affected_side: 'LEFT',
+    rtp_stage: 'STAGE_3_MODIFIED_NON_CONTACT',
+    medical_restrictions: 'Restricted high-velocity cutting; non-contact court drills and spot shooting only.',
+    max_minutes_restriction: 15,
+    notes: 'Ankle taped; swelling reduced by 80%. Re-evaluating prior to Friday contact drills.',
+  },
+  {
+    id: 'status_p3_20260811',
+    player_id: 'p3',
+    player_name: 'Michael Parker',
+    player_number: '#3',
+    date: '2026-08-11',
+    timestamp: '2026-08-11T09:40:00Z',
+    assessed_by: 'Coach Luis Aparicio Villa (S&C)',
+    clearance_status: 'FULL_CLEARANCE',
+    wellness_score: 5,
+    rpe_score: 4,
+    soreness_score: 1,
+    soreness_body_area: 'None',
+    has_active_injury: false,
+    injury_type: null,
+    injury_date: null,
+    affected_side: 'N/A',
+    rtp_stage: 'CLEARED',
+    medical_restrictions: 'Unrestricted',
+    max_minutes_restriction: null,
+    notes: 'Veteran loading protocol in place. Energy and mobility excellent.',
+  },
+];
+
+// Sample CSV export content that coach Luis can copy/download to test external-load CSV import with all 8 core metrics
 export const SAMPLE_KINEXON_CSV_CONTENT = `Player Name,Jersey #,Distance (m),Accumulated Accel Load,Accumulated Accel Load / min,Anaerobic Activity Time,Deceleration Load,Deceleration Load / min,Jump Load,Mechanical Load
 Ryuji Aoki,8,7120,148.0,1.85,00:07:34,122.5,1.53,36,910.0
 Nemanja Radovic,11,5410,96.2,1.20,00:11:08,84.1,1.05,45,720.5
@@ -834,3 +948,5 @@ Shogo Tamaki,65,4724,98.1,1.23,00:03:40,82.4,1.03,22,610.1
 Ryo Tawatari,78,4823,101.2,1.26,00:03:45,85.6,1.07,21,631.5
 Michael Parker,3,5430,115.0,1.44,00:04:20,96.8,1.21,31,732.0
 `;
+export const SAMPLE_EXTERNAL_LOAD_CSV_CONTENT = SAMPLE_KINEXON_CSV_CONTENT;
+

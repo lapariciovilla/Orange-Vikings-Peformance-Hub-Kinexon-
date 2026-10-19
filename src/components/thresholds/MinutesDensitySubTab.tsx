@@ -32,7 +32,7 @@ export const MinutesDensitySubTab: React.FC<MinutesDensitySubTabProps> = ({
           </div>
           <h2 className="text-2xl font-black text-white mt-1">{player.displayName} ({formatPlayerNumber(player.number)})</h2>
           <p className="text-xs text-zinc-400 mt-1">
-            Empirical correlation between minutes played and expected KINEXON metrics to assist minute restriction planning.
+            Empirical correlation between minutes played and expected external-load tracking metrics to assist minute restriction planning.
           </p>
         </div>
 
