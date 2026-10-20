@@ -232,8 +232,15 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
     });
   };
 
-  // Final Save Session
-  const handleSaveImport = () => {
+  // Saving state & error tracking for Phase 5 compliance
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Final Save Session with async Supabase verification
+  const handleSaveImport = async () => {
+    if (isSaving) return;
+    setSaveError(null);
+
     const validRows = parsedRows.filter((r) => r.matchedPlayer !== null);
 
     if (validRows.length === 0) {
@@ -241,46 +248,88 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
       return;
     }
 
-    const meta: Omit<SessionMeta, 'monitored_players_count'> = {
-      id: `session-${importDate}`,
-      date: importDate,
-      season: '2026–2027',
-      session_type: sessionType,
-      session_name: sessionName,
-      created_at: new Date().toISOString(),
-    };
-
-    const records: Omit<PlayerSessionRecord, 'id' | 'session_id' | 'created_at'>[] = validRows.map(
-      (r) => {
-        const player = r.matchedPlayer!;
-        return {
-          date: importDate,
-          season: '2026–2027',
-          session_type: sessionType,
-          session_name: sessionName,
-          player_id: player.id,
-          player_number: player.number,
-          player_name: player.displayName,
-          position: player.position,
-          distance_m: r.distance,
-          accumulated_acceleration_load: r.accelLoad,
-          accumulated_acceleration_load_per_min: r.accelLoadPerMin,
-          anaerobic_activity_time: r.anaerobicTime,
-          deceleration_load: r.decelLoad,
-          deceleration_load_per_min: r.decelLoadPerMin,
-          jump_load: r.jumpLoad,
-          mechanical_load: r.mechLoad,
-          source: 'CSV',
-        };
+    // Check for duplicate player entries in this single import
+    const seenPlayerIds = new Set<string>();
+    const duplicateIds = new Set<string>();
+    for (const r of validRows) {
+      if (r.matchedPlayer) {
+        if (seenPlayerIds.has(r.matchedPlayer.id)) {
+          duplicateIds.add(r.matchedPlayer.displayName);
+        } else {
+          seenPlayerIds.add(r.matchedPlayer.id);
+        }
       }
-    );
+    }
 
-    const result = DataStore.saveSessionData(meta, records);
-    setToastMessage(`Session for ${importDate} successfully imported with ${validRows.length} players!`);
+    if (duplicateIds.size > 0) {
+      const confirmDup = confirm(
+        `Duplicate player records detected for: ${Array.from(duplicateIds).join(', ')}. The latest row in this file will take precedence. Continue?`
+      );
+      if (!confirmDup) return;
+    }
 
-    setTimeout(() => {
-      onImportComplete(result.meta.id);
-    }, 1200);
+    setIsSaving(true);
+
+    try {
+      const meta: Omit<SessionMeta, 'monitored_players_count'> = {
+        id: `session-${importDate}`,
+        date: importDate,
+        season: '2026–2027',
+        session_type: sessionType,
+        session_name: sessionName,
+        created_at: new Date().toISOString(),
+      };
+
+      const records: Omit<PlayerSessionRecord, 'id' | 'session_id' | 'created_at'>[] = validRows.map(
+        (r) => {
+          const player = r.matchedPlayer!;
+          return {
+            date: importDate,
+            season: '2026–2027',
+            session_type: sessionType,
+            session_name: sessionName,
+            player_id: player.id,
+            player_number: player.number,
+            player_name: player.displayName,
+            position: player.position,
+            distance_m: r.distance,
+            accumulated_acceleration_load: r.accelLoad,
+            accumulated_acceleration_load_per_min: r.accelLoadPerMin,
+            anaerobic_activity_time: r.anaerobicTime,
+            deceleration_load: r.decelLoad,
+            deceleration_load_per_min: r.decelLoadPerMin,
+            jump_load: r.jumpLoad,
+            mechanical_load: r.mechLoad,
+            source: 'CSV',
+          };
+        }
+      );
+
+      const result = await DataStore.saveSessionDataAsync(meta, records, {
+        filename: fileName || 'import.csv',
+        acceptedCount: validRows.length,
+        rejectedCount: parsedRows.length - validRows.length,
+        duplicateCount: duplicateIds.size,
+      });
+
+      if (result.error) {
+        setSaveError(
+          `Supabase persistence error: ${result.error.message || JSON.stringify(result.error)}. Unsaved data has been preserved. Please verify your Supabase database schema and connection, then retry.`
+        );
+        setIsSaving(false);
+        return;
+      }
+
+      setToastMessage(`Session for ${importDate} successfully saved to database with ${validRows.length} players!`);
+
+      setTimeout(() => {
+        setIsSaving(false);
+        onImportComplete(result.meta.id);
+      }, 1200);
+    } catch (err: any) {
+      setSaveError(`Unexpected error during import: ${err.message || String(err)}`);
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -808,10 +857,22 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
             </table>
           </div>
 
+          {/* Save Error Alert Banner */}
+          {saveError && (
+            <div className="p-4 bg-rose-950/80 border border-rose-600 rounded-lg text-rose-200 text-xs flex items-start space-x-2">
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <span className="font-bold block mb-1">Save Failed:</span>
+                <span>{saveError}</span>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
             <button
               onClick={() => setStep(2)}
-              className="text-xs text-zinc-400 hover:text-white font-bold"
+              disabled={isSaving}
+              className="text-xs text-zinc-400 hover:text-white font-bold disabled:opacity-50"
             >
               ← Back to Mapping
             </button>
@@ -819,10 +880,20 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
             <button
               id="save-import-btn"
               onClick={handleSaveImport}
-              className="bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black px-6 py-2.5 rounded-lg text-xs flex items-center space-x-2 shadow-lg shadow-orange-950/40"
+              disabled={isSaving}
+              className="bg-orange-600 hover:bg-orange-500 disabled:bg-zinc-700 text-zinc-950 font-black px-6 py-2.5 rounded-lg text-xs flex items-center space-x-2 shadow-lg shadow-orange-950/40 cursor-pointer disabled:cursor-not-allowed transition-colors"
             >
-              <Save className="w-4 h-4" />
-              <span>SAVE SESSION TO FIRESTORE</span>
+              {isSaving ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin text-zinc-900" />
+                  <span>PERSISTING TO SUPABASE...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>CONFIRM & SAVE TO SUPABASE</span>
+                </>
+              )}
             </button>
           </div>
         </div>

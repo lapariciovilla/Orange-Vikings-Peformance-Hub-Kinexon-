@@ -11,6 +11,9 @@ interface HeaderProps {
   showDatePicker?: boolean;
   onToggleMobileMenu?: () => void;
   isMobileMenuOpen?: boolean;
+  isSupabaseActive?: boolean;
+  onOpenDatabaseSettings?: () => void;
+  userEmail?: string | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -21,6 +24,9 @@ export const Header: React.FC<HeaderProps> = ({
   showDatePicker = true,
   onToggleMobileMenu,
   isMobileMenuOpen = false,
+  isSupabaseActive = false,
+  onOpenDatabaseSettings,
+  userEmail,
 }) => {
   const sessions = DataStore.getSessionsMeta();
 
@@ -58,6 +64,29 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div className="flex items-center space-x-2 md:space-x-3">
+        {/* Supabase Status Pill */}
+        {onOpenDatabaseSettings && (
+          <button
+            onClick={onOpenDatabaseSettings}
+            title={isSupabaseActive ? "Connected to Supabase PostgreSQL (Live)" : "Supabase: Configured (Click to inspect)"}
+            className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-black border transition-colors bg-zinc-950/80 hover:bg-zinc-800 border-zinc-700"
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isSupabaseActive ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-amber-400 animate-pulse'
+              }`}
+            />
+            <span className="text-zinc-300">
+              {isSupabaseActive ? 'SUPABASE LIVE' : 'SUPABASE CONNECTED'}
+            </span>
+            {userEmail && (
+              <span className="text-zinc-500 max-w-[100px] truncate hidden md:inline">
+                ({userEmail.split('@')[0]})
+              </span>
+            )}
+          </button>
+        )}
+
         {/* Calendar Session Date Selector */}
         {showDatePicker && (
           <SessionCalendarPicker

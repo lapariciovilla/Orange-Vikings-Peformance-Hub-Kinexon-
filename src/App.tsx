@@ -16,6 +16,7 @@ import { SettingsView } from './components/SettingsView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 import { DataStore } from './lib/dataStore';
+import { SupabaseService } from './lib/supabaseService';
 import { Player, SessionMeta, PlayerSessionRecord } from './types';
 
 export default function App() {
@@ -27,6 +28,10 @@ export default function App() {
   });
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('p4'); // #8 Ryuji Aoki
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Supabase Sync & Auth State
+  const [isSupabaseActive, setIsSupabaseActive] = useState<boolean>(DataStore.isSupabaseActive);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   // Data Store State
   const [roster, setRoster] = useState<Player[]>([]);
@@ -44,6 +49,7 @@ export default function App() {
     setRoster(currentRoster);
     setSessions(sortedSessions);
     setRecords(currentRecords);
+    setIsSupabaseActive(DataStore.isSupabaseActive);
 
     // Always default to chronologically latest valid session in the database
     if (sortedSessions.length > 0) {
@@ -56,7 +62,29 @@ export default function App() {
   };
 
   useEffect(() => {
+    // 1. Initial local load
     refreshData();
+
+    // 2. Initial Supabase synchronization
+    DataStore.syncWithSupabase().then((res) => {
+      refreshData();
+      setIsSupabaseActive(res.success && res.source === 'SUPABASE');
+    });
+
+    // 3. Check auth state
+    SupabaseService.getCurrentUser().then((u) => {
+      if (u) setUserEmail(u.email || null);
+    });
+
+    // 4. Listen for auth changes
+    const { data: authListener } = SupabaseService.onAuthStateChange((_event, session) => {
+      setUserEmail(session?.user?.email || null);
+      DataStore.syncWithSupabase().then(() => refreshData());
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
   }, []);
 
   // Filter records for currentDate
@@ -89,6 +117,9 @@ export default function App() {
           showDatePicker={showHeaderDatePicker}
           onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           isMobileMenuOpen={isMobileMenuOpen}
+          isSupabaseActive={isSupabaseActive}
+          onOpenDatabaseSettings={() => setActiveTab('settings')}
+          userEmail={userEmail}
         />
 
         <main className="flex-1 pb-12">
