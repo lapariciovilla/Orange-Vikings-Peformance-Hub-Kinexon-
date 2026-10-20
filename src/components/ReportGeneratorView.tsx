@@ -21,8 +21,6 @@ import {
   ShieldAlert,
   AlertTriangle,
 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
 interface ReportGeneratorViewProps {
@@ -242,6 +240,11 @@ export const ReportGeneratorView: React.FC<ReportGeneratorViewProps> = ({ roster
         window.print();
         return;
       }
+
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas'),
+      ]);
 
       const pageElements = Array.from(docEl.querySelectorAll('.sc-report-page')) as HTMLElement[];
       const pdf = new jsPDF({

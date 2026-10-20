@@ -79,9 +79,9 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="text-zinc-300">
               {isSupabaseActive ? 'SUPABASE LIVE' : 'SUPABASE CONNECTED'}
             </span>
-            {userEmail && (
+            {userEmail && typeof userEmail === 'string' && (
               <span className="text-zinc-500 max-w-[100px] truncate hidden md:inline">
-                ({userEmail.split('@')[0]})
+                ({userEmail.includes('@') ? userEmail.split('@')[0] : userEmail})
               </span>
             )}
           </button>

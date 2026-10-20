@@ -25,7 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_players_status ON public.players(status);
 
 -- 2. SESSIONS META TABLE
 CREATE TABLE IF NOT EXISTS public.sessions (
-    id TEXT PRIMARY KEY, -- Stable session identifier, e.g. session-2026-08-11
+    id TEXT PRIMARY KEY,
     date DATE NOT NULL,
     season TEXT NOT NULL DEFAULT '2026–2027',
     session_type TEXT NOT NULL CHECK (session_type IN ('Preseason Practice', 'Practice', 'Game', 'Recovery', 'Conditioning', 'Other')),
@@ -45,7 +45,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_season ON public.sessions(season);
 
 -- 3. PLAYER SESSION RECORDS TABLE (External & Internal Load)
 CREATE TABLE IF NOT EXISTS public.player_session_records (
-    id TEXT PRIMARY KEY, -- Stable record identifier, e.g. rec-20260811-p4
+    id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES public.sessions(id) ON DELETE CASCADE,
     player_id TEXT NOT NULL REFERENCES public.players(id) ON DELETE CASCADE,
     date DATE NOT NULL,
@@ -56,11 +56,11 @@ CREATE TABLE IF NOT EXISTS public.player_session_records (
     player_name TEXT NOT NULL,
     position TEXT NOT NULL,
 
-    -- 8 Core External Load Metrics (Preserving exact original units)
+    -- 8 Core External Load Metrics (Exact original units preserved)
     distance_m NUMERIC,
     accumulated_acceleration_load NUMERIC,
     accumulated_acceleration_load_per_min NUMERIC,
-    anaerobic_activity_time NUMERIC, -- Raw seconds from tracking exports
+    anaerobic_activity_time NUMERIC,
     deceleration_load NUMERIC,
     deceleration_load_per_min NUMERIC,
     jump_load NUMERIC,
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS public.player_session_records (
     duration_min NUMERIC,
     game_minutes NUMERIC,
     rpe NUMERIC CHECK (rpe IS NULL OR (rpe >= 1 AND rpe <= 10)),
-    srpe NUMERIC, -- RPE * duration_min
+    srpe NUMERIC,
 
     -- Relative metrics calculated cache
     distance_per_min NUMERIC,
@@ -91,7 +91,7 @@ CREATE INDEX IF NOT EXISTS idx_records_player_id ON public.player_session_record
 CREATE INDEX IF NOT EXISTS idx_records_date ON public.player_session_records(date DESC);
 CREATE INDEX IF NOT EXISTS idx_records_player_date ON public.player_session_records(player_id, date DESC);
 
--- 4. RAW IMPORTED CSV RECORDS TABLE (Immutable Audit Trail)
+-- 4. RAW IMPORTED CSV RECORDS TABLE
 CREATE TABLE IF NOT EXISTS public.raw_imported_csv_records (
     id TEXT PRIMARY KEY,
     import_id TEXT NOT NULL,
@@ -178,12 +178,12 @@ CREATE TABLE IF NOT EXISTS public.coach_settings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 9. COMPETITION SCHEDULE TABLE (Asia/Tokyo time zone context)
+-- 9. COMPETITION SCHEDULE TABLE
 CREATE TABLE IF NOT EXISTS public.competition_schedules (
     id TEXT PRIMARY KEY,
     season TEXT NOT NULL DEFAULT '2026–2027',
     date DATE NOT NULL,
-    tipoff_time_jst TEXT, -- e.g. "14:05" or "19:00" JST
+    tipoff_time_jst TEXT,
     opponent TEXT NOT NULL,
     location TEXT,
     is_home BOOLEAN NOT NULL DEFAULT TRUE,
@@ -225,3 +225,9 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON public.audit_logs(timestamp DESC);
+
+-- Grants
+GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, anon, authenticated, service_role;

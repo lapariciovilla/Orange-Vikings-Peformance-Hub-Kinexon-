@@ -111,14 +111,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const [selectedRankMetric, setSelectedRankMetric] = useState<MetricKey>('distance_m');
 
-  const averages = DataStore.calculateTeamAverages(records);
+  const safeRecords = Array.isArray(records) ? records : [];
+  const averages = DataStore.calculateTeamAverages(safeRecords);
 
   // Compute rankings for the selected metric
-  const sortedRecords = [...records]
-    .filter((r) => r[selectedRankMetric] !== null && r[selectedRankMetric] !== undefined)
-    .sort((a, b) => (b[selectedRankMetric] as number) - (a[selectedRankMetric] as number));
+  const sortedRecords = safeRecords
+    .filter((r) => r && r[selectedRankMetric] !== null && r[selectedRankMetric] !== undefined)
+    .sort((a, b) => (Number(b[selectedRankMetric]) || 0) - (Number(a[selectedRankMetric]) || 0));
 
-  const maxRankVal = sortedRecords.length > 0 ? (sortedRecords[0][selectedRankMetric] as number) : 1;
+  const maxRankVal = sortedRecords.length > 0 ? Math.max(1, Number(sortedRecords[0][selectedRankMetric]) || 1) : 1;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 text-zinc-100">

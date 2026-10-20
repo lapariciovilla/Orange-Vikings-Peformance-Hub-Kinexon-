@@ -24,7 +24,12 @@ import {
   UserCheck,
   LogOut,
   LogIn,
+  Copy,
+  Check,
+  ExternalLink,
+  FileCode,
 } from 'lucide-react';
+import { COMPLETE_SUPABASE_SCHEMA_SQL } from '../data/schemaSQL';
 
 interface SettingsViewProps {
   roster: Player[];
@@ -45,8 +50,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ roster, onRefresh })
   const [authError, setAuthError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
-  // Roster Initialization State (Phase 2)
+  // Roster Initialization State (Phase 2 & Step 6)
   const [isInitializingRoster, setIsInitializingRoster] = useState(false);
+  const [rosterInitError, setRosterInitError] = useState<string | null>(null);
+  const [rosterInitSuccess, setRosterInitSuccess] = useState<string | null>(null);
+  const [isSqlCopied, setIsSqlCopied] = useState(false);
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(COMPLETE_SUPABASE_SCHEMA_SQL);
+    setIsSqlCopied(true);
+    setTimeout(() => setIsSqlCopied(false), 3000);
+    showToast('SQL Schema copied to clipboard!');
+  };
 
   // Backup & Recovery State (Phase 7)
   const [restoreFile, setRestoreFile] = useState<BackupPayload | null>(null);
@@ -149,8 +164,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ roster, onRefresh })
 
   // Phase 2: Explicit validated roster initialization workflow
   const handleInitializeRoster = async () => {
+    setRosterInitError(null);
+    setRosterInitSuccess(null);
+
+    // If tables do not exist in the live database schema cache yet
+    if (dbStatus && !dbStatus.tableStatuses.players) {
+      setRosterInitError(
+        "Database Setup Required: Table 'public.players' does not exist in Supabase project ukyvteijkvxmouoksdca. Please apply the SQL schema in your Supabase SQL Editor first (use the 1-Click Copy button below)."
+      );
+      return;
+    }
+
     const confirmInit = confirm(
-      `Initialize ${roster.length} athletes from the official Orange Vikings roster into Supabase PostgreSQL?\n\nThis will safely insert/update the verified roster in the database without adding any demo sessions.`
+      `Initialize ${roster.length} athletes from the official Orange Vikings roster into Supabase PostgreSQL?\n\nThis will safely insert/update verified roster records with stable IDs without adding any demo sessions.`
     );
     if (!confirmInit) return;
 
@@ -158,14 +184,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ roster, onRefresh })
     try {
       const res = await DataStore.initializeSupabaseRoster(roster);
       if (res.error) {
-        alert(`Roster initialization failed: ${res.error.message || JSON.stringify(res.error)}`);
-      } else {
-        showToast(`Successfully initialized ${res.count} players into Supabase!`);
+        setRosterInitError(res.error.message || JSON.stringify(res.error));
+      } else if (res.verified) {
+        setRosterInitSuccess(
+          `Roster Initialized & Verified! Successfully verified ${res.count} Orange Vikings athletes in Supabase PostgreSQL.`
+        );
+        showToast(`Verified ${res.count} players in Supabase!`);
         await runConnectionCheck();
         onRefresh();
+      } else {
+        setRosterInitError('Roster write did not return verification confirmation from Supabase.');
       }
     } catch (err: any) {
-      alert(`Initialization error: ${err.message || String(err)}`);
+      setRosterInitError(`Initialization error: ${err.message || String(err)}`);
     } finally {
       setIsInitializingRoster(false);
     }
@@ -535,6 +566,61 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ roster, onRefresh })
             )}
           </div>
 
+          {/* SQL SCHEMA MIGRATION PANEL (Step 2 & Step 3) */}
+          <div className="bg-zinc-900 border border-orange-500/40 rounded-xl p-6 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-3">
+              <div>
+                <div className="text-orange-500 text-xs font-black tracking-widest uppercase mb-1">
+                  SUPABASE POSTGRESQL MIGRATION (STEP 2 & 3)
+                </div>
+                <h2 className="text-base font-black text-white flex items-center space-x-2">
+                  <FileCode className="w-5 h-5 text-orange-500" />
+                  <span>DATABASE TABLES SCHEMA & RLS SETUP</span>
+                </h2>
+                <p className="text-xs text-zinc-400 mt-1">
+                  Required once to initialize all 11 tables, constraints, foreign keys, and Row Level Security policies.
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-2 shrink-0">
+                <button
+                  onClick={handleCopySql}
+                  className="bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black px-4 py-2 rounded-lg text-xs flex items-center space-x-1.5 shadow-lg cursor-pointer"
+                >
+                  {isSqlCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  <span>{isSqlCopied ? 'COPIED TO CLIPBOARD!' : 'COPY SQL MIGRATION'}</span>
+                </button>
+                <a
+                  href="https://supabase.com/dashboard/project/ukyvteijkvxmouoksdca/sql/new"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold px-3 py-2 rounded-lg text-xs flex items-center space-x-1.5 border border-zinc-700"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-orange-400" />
+                  <span>OPEN SQL EDITOR</span>
+                </a>
+              </div>
+            </div>
+
+            <div className="bg-zinc-950 p-4 rounded-lg border border-zinc-800 space-y-3 text-xs">
+              <div className="font-bold text-zinc-200">Execution Steps:</div>
+              <ol className="list-decimal list-inside space-y-1.5 text-zinc-400 leading-relaxed">
+                <li>
+                  Click <strong className="text-white">OPEN SQL EDITOR</strong> (or navigate to your Supabase project <code className="text-orange-400">ukyvteijkvxmouoksdca</code> &rarr; SQL Editor &rarr; New Query).
+                </li>
+                <li>
+                  Click <strong className="text-white">COPY SQL MIGRATION</strong> above to copy the complete schema script (also stored at <code className="text-zinc-300">supabase/schema.sql</code>).
+                </li>
+                <li>
+                  Paste into the editor and click <strong className="text-emerald-400">Run</strong>. All 11 tables, indexes, constraints, RLS policies, and cache notifications are executed idempotently.
+                </li>
+                <li>
+                  Return to this page, click <strong className="text-orange-400">TEST CONNECTION</strong>, then proceed to <strong className="text-white">Roster & DB Initialization</strong> to sync athletes.
+                </li>
+              </ol>
+            </div>
+          </div>
+
           {/* Coaching Staff Authentication Card (Phase 4) */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
@@ -666,6 +752,76 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ roster, onRefresh })
                 )}
               </button>
             </div>
+
+            {/* Error Message */}
+            {rosterInitError && (
+              <div className="p-4 bg-rose-950/80 border border-rose-600 rounded-lg text-rose-200 text-xs space-y-2">
+                <div className="flex items-center space-x-2 font-black text-rose-300">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>Roster Initialization Error</span>
+                </div>
+                <p className="leading-relaxed">{rosterInitError}</p>
+                {(rosterInitError.includes('schema cache') || rosterInitError.includes('does not exist')) && (
+                  <div className="pt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handleCopySql}
+                      className="bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black px-3 py-1.5 rounded text-xs flex items-center space-x-1.5 cursor-pointer shadow"
+                    >
+                      {isSqlCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{isSqlCopied ? 'COPIED SQL!' : 'COPY SQL SCHEMA MIGRATION'}</span>
+                    </button>
+                    <a
+                      href="https://supabase.com/dashboard/project/ukyvteijkvxmouoksdca/sql/new"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold px-3 py-1.5 rounded text-xs flex items-center space-x-1.5 border border-zinc-700"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-orange-400" />
+                      <span>OPEN SUPABASE SQL EDITOR</span>
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Success Message */}
+            {rosterInitSuccess && (
+              <div className="p-4 bg-emerald-950/80 border border-emerald-600 rounded-lg text-emerald-200 text-xs flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="font-bold">{rosterInitSuccess}</span>
+              </div>
+            )}
+
+            {/* Pending Schema Warning if players table is missing */}
+            {dbStatus && !dbStatus.tableStatuses.players && !rosterInitError && (
+              <div className="p-4 bg-amber-950/80 border border-amber-600/80 rounded-lg text-amber-200 text-xs space-y-2">
+                <div className="flex items-center space-x-2 font-black text-amber-300">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Action Required: Table 'public.players' not yet created in Supabase</span>
+                </div>
+                <p className="text-zinc-300">
+                  Supabase PostgreSQL project <code className="text-orange-400">ukyvteijkvxmouoksdca</code> needs the database schema applied before the roster can be saved to the cloud.
+                </p>
+                <div className="pt-1 flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={handleCopySql}
+                    className="bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black px-3 py-1.5 rounded text-xs flex items-center space-x-1.5 cursor-pointer shadow"
+                  >
+                    {isSqlCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{isSqlCopied ? 'COPIED TO CLIPBOARD!' : 'COPY SQL SCHEMA MIGRATION (1-CLICK)'}</span>
+                  </button>
+                  <a
+                    href="https://supabase.com/dashboard/project/ukyvteijkvxmouoksdca/sql/new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold px-3 py-1.5 rounded text-xs flex items-center space-x-1.5 border border-zinc-700"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-orange-400" />
+                    <span>OPEN SUPABASE SQL EDITOR</span>
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Roster Admin Table */}

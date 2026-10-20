@@ -220,17 +220,17 @@ export class DataStore {
   }
 
   // Phase 2: Explicit validated roster initialization workflow
-  static async initializeSupabaseRoster(rosterToInit?: Player[]): Promise<{ count: number; error: any }> {
+  static async initializeSupabaseRoster(rosterToInit?: Player[]): Promise<{ count: number; verified?: boolean; error: any }> {
     const list = rosterToInit || this.getRoster();
     if (list.length === 0) {
-      return { count: 0, error: new Error('Cannot initialize empty roster.') };
+      return { count: 0, verified: false, error: new Error('Cannot initialize empty roster.') };
     }
 
     const res = await SupabaseService.initializeRoster(list);
-    if (!res.error) {
+    if (!res.error && res.verified) {
       this.activeRoster = list;
       this.saveRoster(list);
-      await this.addAuditLogAsync('INITIALIZE_ROSTER', `Initialized ${list.length} players to Supabase database.`);
+      await this.addAuditLogAsync('INITIALIZE_ROSTER', `Initialized & verified ${res.count} players to Supabase database.`);
     }
     return res;
   }

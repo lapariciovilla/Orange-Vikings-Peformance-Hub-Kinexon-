@@ -130,17 +130,29 @@ export class SupabaseService {
 
       for (const table of probeTables) {
         try {
-          const { error } = await supabase.from(table).select('count', { count: 'exact', head: true });
+          const { error } = await supabase.from(table).select('*').limit(1);
           if (!error) {
             result.tableStatuses[table] = true;
             existingTablesCount++;
-          } else if (error.code === '42P01') {
-            // relation does not exist
+          } else if (
+            error.code === 'PGRST205' ||
+            error.code === '42P01' ||
+            error.message?.includes('schema cache') ||
+            error.message?.includes('does not exist')
+          ) {
+            // Table definitely does not exist in schema cache
             result.tableStatuses[table] = false;
-          } else if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('policy')) {
-            // Table exists but RLS denied anon access! That proves the table exists!
+          } else if (
+            error.code === '42501' ||
+            error.message?.includes('permission') ||
+            error.message?.includes('policy') ||
+            error.message?.includes('row-level security')
+          ) {
+            // Table exists in database, but RLS denied access to anon role
             result.tableStatuses[table] = true;
             existingTablesCount++;
+          } else {
+            result.tableStatuses[table] = false;
           }
         } catch {
           result.tableStatuses[table] = false;
@@ -222,29 +234,98 @@ export class SupabaseService {
     }
   }
 
-  // Explicit, validated roster initialization workflow (Phase 2 & Phase 3)
-  static async initializeRoster(roster: Player[]): Promise<{ count: number; error: any }> {
+  // Explicit, validated roster initialization workflow (Phase 2, 3, & 6)
+  static async initializeRoster(roster: Player[]): Promise<{ count: number; verified: boolean; verifiedPlayers?: any[]; error: any }> {
     try {
-      const payloads = roster.map((p) => ({
+      if (!roster || roster.length === 0) {
+        return { count: 0, verified: false, error: new Error('Cannot initialize an empty roster.') };
+      }
+
+      // Check if table public.players exists in the schema cache first
+      const { error: probeError } = await supabase
+        .from('players')
+        .select('id', { count: 'exact', head: true });
+
+      if (probeError) {
+        if (probeError.code === 'PGRST205' || probeError.message?.includes('schema cache') || probeError.message?.includes('does not exist')) {
+          return {
+            count: 0,
+            verified: false,
+            error: new Error(
+              "Table 'public.players' does not exist in Supabase project ukyvteijkvxmouoksdca. Please run the SQL migration (supabase/schema.sql) in your Supabase Dashboard SQL Editor."
+            ),
+          };
+        }
+      }
+
+      // Filter and deduplicate only verified athletes with stable IDs
+      const uniquePlayersMap = new Map<string, Player>();
+      for (const p of roster) {
+        if (p.id && p.displayName && p.number) {
+          uniquePlayersMap.set(p.id, p);
+        }
+      }
+
+      const validList = Array.from(uniquePlayersMap.values());
+      if (validList.length === 0) {
+        return { count: 0, verified: false, error: new Error('No valid athlete records with stable IDs found to initialize.') };
+      }
+
+      const payloads = validList.map((p) => ({
         id: p.id,
         number: p.number,
         display_name: p.displayName,
         position: p.position,
-        aliases: p.aliases,
-        status: p.status,
-        is_confirmed: p.isConfirmed,
+        aliases: p.aliases || [p.displayName],
+        status: p.status || 'ACTIVE',
+        is_confirmed: p.isConfirmed ?? true,
         notes: p.notes || null,
         updated_at: new Date().toISOString(),
       }));
 
-      const { data, error } = await supabase
+      // Execute upsert using stable player primary key
+      const { error: upsertError } = await supabase
         .from('players')
         .upsert(payloads, { onConflict: 'id' });
 
-      if (error) return { count: 0, error };
-      return { count: payloads.length, error: null };
-    } catch (err) {
-      return { count: 0, error: err };
+      if (upsertError) {
+        if (upsertError.code === '42501' || upsertError.message?.includes('row-level security')) {
+          return {
+            count: 0,
+            verified: false,
+            error: new Error(
+              'Row Level Security prevented saving players. Coaching staff authentication is required. Please sign in or create an account in the Coaching Staff panel.'
+            ),
+          };
+        }
+        return { count: 0, verified: false, error: upsertError };
+      }
+
+      // Verification Step: Read back from Supabase to confirm persistence
+      const { data: readBack, error: readError } = await supabase
+        .from('players')
+        .select('id, number, display_name, position, status')
+        .order('number', { ascending: true });
+
+      if (readError) {
+        return {
+          count: 0,
+          verified: false,
+          error: new Error(`Roster was written, but verification read-back failed: ${readError.message}`),
+        };
+      }
+
+      if (!readBack || readBack.length === 0) {
+        return {
+          count: 0,
+          verified: false,
+          error: new Error('Database write reported success, but 0 records were found when verifying public.players.'),
+        };
+      }
+
+      return { count: readBack.length, verified: true, verifiedPlayers: readBack, error: null };
+    } catch (err: any) {
+      return { count: 0, verified: false, error: err };
     }
   }
 

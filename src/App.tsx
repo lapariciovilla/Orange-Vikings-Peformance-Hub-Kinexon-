@@ -62,29 +62,50 @@ export default function App() {
   };
 
   useEffect(() => {
-    // 1. Initial local load
-    refreshData();
-
-    // 2. Initial Supabase synchronization
-    DataStore.syncWithSupabase().then((res) => {
+    try {
+      // 1. Initial local load
       refreshData();
-      setIsSupabaseActive(res.success && res.source === 'SUPABASE');
-    });
 
-    // 3. Check auth state
-    SupabaseService.getCurrentUser().then((u) => {
-      if (u) setUserEmail(u.email || null);
-    });
+      // 2. Initial Supabase synchronization (resilient)
+      DataStore.syncWithSupabase()
+        .then((res) => {
+          refreshData();
+          setIsSupabaseActive(res.success && res.source === 'SUPABASE');
+        })
+        .catch((err) => {
+          console.warn('Supabase sync notice:', err);
+          refreshData();
+        });
 
-    // 4. Listen for auth changes
-    const { data: authListener } = SupabaseService.onAuthStateChange((_event, session) => {
-      setUserEmail(session?.user?.email || null);
-      DataStore.syncWithSupabase().then(() => refreshData());
-    });
+      // 3. Check auth state safely
+      SupabaseService.getCurrentUser()
+        .then((u) => {
+          if (u) setUserEmail(u.email || null);
+        })
+        .catch((err) => {
+          console.warn('Auth check notice:', err);
+        });
 
-    return () => {
-      authListener?.subscription?.unsubscribe();
-    };
+      // 4. Listen for auth changes safely
+      const listenerResult = SupabaseService.onAuthStateChange((_event, session) => {
+        try {
+          setUserEmail(session?.user?.email || null);
+          DataStore.syncWithSupabase()
+            .then(() => refreshData())
+            .catch(() => {});
+        } catch (e) {
+          console.warn('Auth listener error:', e);
+        }
+      });
+
+      return () => {
+        try {
+          listenerResult?.data?.subscription?.unsubscribe();
+        } catch {}
+      };
+    } catch (topErr) {
+      console.error('App initialization effect error:', topErr);
+    }
   }, []);
 
   // Filter records for currentDate
