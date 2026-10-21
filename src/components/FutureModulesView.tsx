@@ -14,6 +14,8 @@ import {
   TrendingUp,
   BarChart2,
   Filter,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -40,6 +42,12 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
   const [rpeDate, setRpeDate] = useState('2026-08-11');
   const [rpeNotes, setRpeNotes] = useState('');
 
+  // Async operation & error states
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   // Editing state for RPE logs
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<RPEEntry>>({});
@@ -49,40 +57,117 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
 
   const showToast = (msg: string) => {
     setToast(msg);
-    setTimeout(() => setToast(null), 2500);
+    setTimeout(() => setToast(null), 3000);
   };
 
-  const handleSaveRPE = () => {
-    DataStore.saveRPEEntry({
-      player_id: rpePlayerId,
-      session_id: `session-${rpeDate}`,
-      date: rpeDate,
-      rpe_score: rpeScore,
-      notes: rpeNotes || 'Regular training session',
-    });
-    setRpeNotes('');
-    showToast('RPE score successfully recorded!');
-    setRefreshTrigger((prev) => prev + 1);
+  const handleSaveRPE = async () => {
+    const athlete = roster.find((p) => p.id === rpePlayerId) || roster[0];
+    if (!athlete) {
+      setErrorMessage('Please select a valid athlete from the roster.');
+      return;
+    }
+
+    setIsSaving(true);
+    setErrorMessage(null);
+
+    // Verify if a session exists for this date to avoid foreign key errors on session_id
+    const allSessions = DataStore.getSessionsMeta();
+    const existingSession = allSessions.find((s) => s.id === `session-${rpeDate}` || s.date === rpeDate);
+    const validSessionId = existingSession ? existingSession.id : null;
+
+    try {
+      const res = await DataStore.saveRPEEntryAsync({
+        player_id: athlete.id,
+        player_number: athlete.number,
+        session_id: validSessionId,
+        date: rpeDate,
+        rpe_score: rpeScore,
+        duration_min: existingSession?.duration_min,
+        notes: rpeNotes || 'Regular training session',
+      });
+
+      if (res.error) {
+        console.error('[FutureModulesView] RPE save failed:', res.error);
+        const errorText =
+          res.error.friendlyMessage ||
+          res.error.message ||
+          (res.error.code === '42501'
+            ? 'Supabase RLS Policy error: Table "rpe_entries" requires RLS permissions for anon/authenticated roles. Check Settings > Database.'
+            : 'Failed to persist RPE score to Supabase database.');
+        setErrorMessage(errorText);
+        // Do NOT clear user input or show success toast on failure
+        return;
+      }
+
+      setRpeNotes('');
+      showToast('RPE score successfully recorded & persisted to Supabase!');
+      setRefreshTrigger((prev) => prev + 1);
+    } catch (err: any) {
+      console.error('[FutureModulesView] Unexpected error:', err);
+      setErrorMessage(err.message || 'Unexpected error while recording RPE score.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleStartEdit = (entry: RPEEntry) => {
     setEditingId(entry.id);
     setEditForm({ ...entry });
+    setErrorMessage(null);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingId) return;
-    DataStore.updateRPEEntry(editingId, editForm);
-    setEditingId(null);
-    showToast('RPE entry updated!');
-    setRefreshTrigger((prev) => prev + 1);
+    setIsUpdating(true);
+    setErrorMessage(null);
+
+    try {
+      const res = await DataStore.updateRPEEntryAsync(editingId, editForm);
+      if (res.error) {
+        console.error('[FutureModulesView] RPE update failed:', res.error);
+        const errorText =
+          res.error.friendlyMessage ||
+          res.error.message ||
+          'Failed to update RPE entry in Supabase.';
+        setErrorMessage(errorText);
+        return;
+      }
+
+      setEditingId(null);
+      showToast('RPE entry updated & persisted to Supabase!');
+      setRefreshTrigger((prev) => prev + 1);
+    } catch (err: any) {
+      console.error('[FutureModulesView] Error updating RPE:', err);
+      setErrorMessage(err.message || 'Unexpected error updating RPE entry.');
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Delete this RPE log entry?')) {
-      DataStore.deleteRPEEntry(id);
-      showToast('RPE log deleted');
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this RPE log entry?')) return;
+    setDeletingId(id);
+    setErrorMessage(null);
+
+    try {
+      const res = await DataStore.deleteRPEEntryAsync(id);
+      if (res.error) {
+        console.error('[FutureModulesView] RPE delete failed:', res.error);
+        const errorText =
+          res.error.friendlyMessage ||
+          res.error.message ||
+          'Failed to delete RPE entry from Supabase.';
+        setErrorMessage(errorText);
+        return;
+      }
+
+      showToast('RPE log deleted from Supabase');
       setRefreshTrigger((prev) => prev + 1);
+    } catch (err: any) {
+      console.error('[FutureModulesView] Error deleting RPE:', err);
+      setErrorMessage(err.message || 'Unexpected error deleting RPE log.');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -238,6 +323,24 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
             <span>LOG NEW ATHLETE RPE</span>
           </h2>
 
+          {errorMessage && (
+            <div className="p-3 bg-rose-950/80 border border-rose-600/60 rounded-lg text-xs text-rose-200 flex items-start justify-between gap-2 shadow-lg">
+              <div className="flex items-start space-x-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-rose-300">Persistence Notice</p>
+                  <p className="text-rose-200 mt-0.5 leading-relaxed">{errorMessage}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setErrorMessage(null)}
+                className="text-rose-400 hover:text-white shrink-0 p-1 rounded"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           <div className="space-y-3 text-xs">
             <div>
               <label className="block text-zinc-400 font-bold mb-1">Athlete</label>
@@ -298,10 +401,20 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
             <button
               id="log-rpe-submit-btn"
               onClick={handleSaveRPE}
-              className="w-full bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black py-3 rounded-lg text-xs shadow-lg transition-colors flex items-center justify-center space-x-1.5"
+              disabled={isSaving}
+              className="w-full bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-zinc-950 font-black py-3 rounded-lg text-xs shadow-lg transition-colors flex items-center justify-center space-x-1.5 cursor-pointer disabled:cursor-not-allowed"
             >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>RECORD RPE SCORE</span>
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
+                  <span>PERSISTING TO SUPABASE...</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 stroke-[3]" />
+                  <span>RECORD RPE SCORE</span>
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -423,13 +536,19 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
                               <div className="flex items-center justify-end space-x-1">
                                 <button
                                   onClick={handleSaveEdit}
-                                  className="bg-orange-600 text-zinc-950 font-black px-2.5 py-1 rounded text-[11px] flex items-center space-x-1"
+                                  disabled={isUpdating}
+                                  className="bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-zinc-950 font-black px-2.5 py-1 rounded text-[11px] flex items-center space-x-1"
                                 >
-                                  <Save className="w-3.5 h-3.5" />
-                                  <span>Save</span>
+                                  {isUpdating ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <Save className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>{isUpdating ? 'Saving...' : 'Save'}</span>
                                 </button>
                                 <button
                                   onClick={() => setEditingId(null)}
+                                  disabled={isUpdating}
                                   className="text-zinc-400 hover:text-white p-1"
                                 >
                                   <X className="w-4 h-4" />
@@ -469,10 +588,15 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
                                 </button>
                                 <button
                                   onClick={() => handleDelete(e.id)}
-                                  className="text-zinc-500 hover:text-rose-400 p-1 transition-colors"
+                                  disabled={deletingId === e.id}
+                                  className="text-zinc-500 hover:text-rose-400 p-1 transition-colors disabled:opacity-50"
                                   title="Delete entry"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  {deletingId === e.id ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-400" />
+                                  ) : (
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  )}
                                 </button>
                               </div>
                             </td>

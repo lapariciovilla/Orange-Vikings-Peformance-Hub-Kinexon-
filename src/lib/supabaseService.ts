@@ -582,26 +582,79 @@ export class SupabaseService {
 
   static async saveRPEEntry(entry: RPEEntry): Promise<{ data: RPEEntry | null; error: any }> {
     try {
-      const payload = {
+      const payload: any = {
         id: entry.id,
         player_id: entry.player_id,
         player_number: entry.player_number || null,
         session_id: entry.session_id || null,
         date: entry.date,
-        rpe_score: entry.rpe_score,
-        duration_min: entry.duration_min || null,
-        srpe: entry.sRPE || (entry.duration_min ? entry.rpe_score * entry.duration_min : null),
+        rpe_score: Number(entry.rpe_score),
+        duration_min: entry.duration_min ? Number(entry.duration_min) : null,
+        srpe: entry.sRPE || (entry.duration_min ? Number(entry.rpe_score) * Number(entry.duration_min) : null),
         notes: entry.notes || null,
         updated_at: new Date().toISOString(),
       };
 
-      const { error } = await supabase
+      let { error } = await supabase
         .from('rpe_entries')
         .upsert(payload, { onConflict: 'id' });
 
-      if (error) return { data: null, error };
-      return { data: entry, error: null };
-    } catch (err) {
+      // If foreign key constraint failed on session_id (PostgreSQL error 23503), retry with null session_id
+      if (
+        error &&
+        payload.session_id &&
+        (error.code === '23503' || error.message?.includes('session_id') || error.message?.includes('foreign key constraint'))
+      ) {
+        console.warn('[SupabaseService] Foreign key constraint on session_id; retrying with session_id = null');
+        payload.session_id = null;
+        const retryRes = await supabase
+          .from('rpe_entries')
+          .upsert(payload, { onConflict: 'id' });
+        error = retryRes.error;
+      }
+
+      // If unique constraint violation on (player_id, date, session_id), find existing row ID and update
+      if (
+        error &&
+        (error.code === '23505' || error.message?.includes('uq_rpe_player_date_session') || error.message?.includes('duplicate key'))
+      ) {
+        console.warn('[SupabaseService] Duplicate entry on (player_id, date); fetching existing ID to update');
+        let query = supabase
+          .from('rpe_entries')
+          .select('id')
+          .eq('player_id', payload.player_id)
+          .eq('date', payload.date);
+
+        if (payload.session_id) {
+          query = query.eq('session_id', payload.session_id);
+        }
+
+        const { data: existingRows } = await query.limit(1);
+
+        if (existingRows && existingRows.length > 0) {
+          payload.id = existingRows[0].id;
+          const retryRes = await supabase
+            .from('rpe_entries')
+            .upsert(payload, { onConflict: 'id' });
+          error = retryRes.error;
+        }
+      }
+
+      if (error) {
+        console.error('[SupabaseService.saveRPEEntry] Database error:', error);
+        if (error.code === '42501' || error.message?.includes('violates row-level security')) {
+          (error as any).friendlyMessage =
+            'Database permission denied (Row Level Security). The "rpe_entries" table requires the RLS policy update in Supabase SQL editor.';
+        } else if (error.code === '23503') {
+          (error as any).friendlyMessage =
+            `Foreign key constraint error: Athlete or Session reference not found in database (${error.message}).`;
+        }
+        return { data: null, error };
+      }
+
+      return { data: { ...entry, id: payload.id, session_id: payload.session_id }, error: null };
+    } catch (err: any) {
+      console.error('[SupabaseService.saveRPEEntry] Exception during save:', err);
       return { data: null, error: err };
     }
   }
@@ -613,9 +666,17 @@ export class SupabaseService {
         .delete()
         .eq('id', id);
 
-      if (error) return { success: false, error };
+      if (error) {
+        console.error('[SupabaseService.deleteRPEEntry] Database error:', error);
+        if (error.code === '42501' || error.message?.includes('violates row-level security')) {
+          (error as any).friendlyMessage =
+            'Database permission denied (Row Level Security) when deleting RPE entry. Update RLS policy in Supabase SQL editor.';
+        }
+        return { success: false, error };
+      }
       return { success: true, error: null };
-    } catch (err) {
+    } catch (err: any) {
+      console.error('[SupabaseService.deleteRPEEntry] Exception during delete:', err);
       return { success: false, error: err };
     }
   }

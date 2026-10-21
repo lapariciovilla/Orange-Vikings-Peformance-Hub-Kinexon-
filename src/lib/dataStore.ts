@@ -162,12 +162,30 @@ export class DataStore {
         };
       }
 
-      // Phase 2: Start with empty operational dataset if Supabase is fresh!
-      // If Supabase has zero players or records, we respect the empty operational database.
       this.activeRoster = rosterRes.data || [];
       this.activeSessions = sessionsRes.data || [];
       this.activeRecords = (recordsRes.data || []).map((r) => this.enrichRecordWithRelative(r));
-      this.activeRPE = rpeRes.data || [];
+
+      // Handle RPE Entries persistence & sync
+      if (rpeRes.data && rpeRes.data.length > 0) {
+        this.activeRPE = rpeRes.data;
+        setStored(STORAGE_KEYS.RPE_ENTRIES, rpeRes.data);
+      } else if (rpeRes.error) {
+        console.warn('[DataStore] Supabase RPE fetch failed; preserving local cache:', rpeRes.error);
+        const cached = getStored<RPEEntry[]>(STORAGE_KEYS.RPE_ENTRIES, []);
+        this.activeRPE = cached;
+      } else {
+        const localRPE = getStored<RPEEntry[]>(STORAGE_KEYS.RPE_ENTRIES, []);
+        if (localRPE.length > 0) {
+          this.activeRPE = localRPE;
+          // Sync local entries to Supabase in background
+          Promise.all(localRPE.map((entry) => SupabaseService.saveRPEEntry(entry))).catch((e) => {
+            console.warn('[DataStore] Background sync of local RPE to Supabase deferred:', e);
+          });
+        } else {
+          this.activeRPE = [];
+        }
+      }
       this.activeStatus = statusRes.data || [];
       if (settingsRes.data) {
         this.activeSettings = settingsRes.data;
@@ -820,22 +838,58 @@ export class DataStore {
   }
 
   static async saveRPEEntryAsync(entry: Omit<RPEEntry, 'id' | 'created_at'>): Promise<{ entry: RPEEntry | null; error: any }> {
-    const id = `rpe_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+    const entries = [...this.getRPEEntries()];
+
+    const existingIdx = entries.findIndex((e) => {
+      const pMatch = e.player_id === entry.player_id;
+      const dMatch = e.date === entry.date;
+      if (entry.session_id && e.session_id) {
+        return pMatch && dMatch && e.session_id === entry.session_id;
+      }
+      return pMatch && dMatch;
+    });
+
+    const id = existingIdx >= 0 ? entries[existingIdx].id : `rpe_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
     const fullEntry: RPEEntry = {
       ...entry,
       id,
-      sRPE: entry.rpe_score && entry.duration_min ? entry.rpe_score * entry.duration_min : undefined,
-      created_at: new Date().toISOString(),
+      sRPE: entry.rpe_score && entry.duration_min ? Number(entry.rpe_score) * Number(entry.duration_min) : (existingIdx >= 0 ? entries[existingIdx].sRPE : undefined),
+      created_at: existingIdx >= 0 ? entries[existingIdx].created_at : new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
     if (this.isSupabaseActive) {
       const res = await SupabaseService.saveRPEEntry(fullEntry);
       if (res.error) {
+        console.error('[DataStore.saveRPEEntryAsync] Supabase persistence error:', res.error);
         return { entry: null, error: res.error };
+      }
+      if (res.data) {
+        fullEntry.id = res.data.id;
+        fullEntry.session_id = res.data.session_id;
       }
     }
 
-    return { entry: this.saveRPEEntry(entry), error: null };
+    // Persist to in-memory and local cache
+    if (existingIdx >= 0) {
+      entries[existingIdx] = fullEntry;
+    } else {
+      entries.push(fullEntry);
+    }
+    this.activeRPE = entries;
+    setStored(STORAGE_KEYS.RPE_ENTRIES, entries);
+
+    // Update matching record in player records
+    const records = [...this.getPlayerRecords()];
+    const recIdx = records.findIndex((r) => r.player_id === entry.player_id && r.date === entry.date);
+    if (recIdx >= 0) {
+      records[recIdx].RPE = entry.rpe_score;
+      if (entry.duration_min) records[recIdx].sRPE = Number(entry.rpe_score) * Number(entry.duration_min);
+      this.savePlayerRecords(records);
+    }
+
+    this.addAuditLog('SAVE_RPE', `Recorded RPE ${entry.rpe_score}/10 for date ${entry.date}`);
+    return { entry: fullEntry, error: null };
   }
 
   static updateRPEEntry(id: string, updates: Partial<RPEEntry>): RPEEntry | null {
@@ -856,6 +910,35 @@ export class DataStore {
     return entries[idx];
   }
 
+  static async updateRPEEntryAsync(id: string, updates: Partial<RPEEntry>): Promise<{ entry: RPEEntry | null; error: any }> {
+    const entries = [...this.getRPEEntries()];
+    const idx = entries.findIndex((e) => e.id === id);
+    if (idx === -1) return { entry: null, error: new Error('RPE entry not found') };
+
+    const updatedEntry: RPEEntry = {
+      ...entries[idx],
+      ...updates,
+      sRPE: updates.rpe_score && (updates.duration_min || entries[idx].duration_min)
+        ? Number(updates.rpe_score) * Number(updates.duration_min || entries[idx].duration_min)
+        : (updates.rpe_score && entries[idx].sRPE ? Number(updates.rpe_score) * Number(entries[idx].duration_min || 90) : entries[idx].sRPE),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (this.isSupabaseActive) {
+      const res = await SupabaseService.saveRPEEntry(updatedEntry);
+      if (res.error) {
+        console.error('[DataStore.updateRPEEntryAsync] Supabase update error:', res.error);
+        return { entry: null, error: res.error };
+      }
+    }
+
+    entries[idx] = updatedEntry;
+    this.activeRPE = entries;
+    setStored(STORAGE_KEYS.RPE_ENTRIES, entries);
+    this.addAuditLog('UPDATE_RPE', `Updated RPE entry ${id}`);
+    return { entry: updatedEntry, error: null };
+  }
+
   static deleteRPEEntry(id: string): boolean {
     const entries = this.getRPEEntries();
     const filtered = entries.filter((e) => e.id !== id);
@@ -871,6 +954,23 @@ export class DataStore {
     }
 
     return true;
+  }
+
+  static async deleteRPEEntryAsync(id: string): Promise<{ success: boolean; error: any }> {
+    if (this.isSupabaseActive) {
+      const res = await SupabaseService.deleteRPEEntry(id);
+      if (res.error) {
+        console.error('[DataStore.deleteRPEEntryAsync] Supabase delete error:', res.error);
+        return { success: false, error: res.error };
+      }
+    }
+
+    const entries = this.getRPEEntries();
+    const filtered = entries.filter((e) => e.id !== id);
+    this.activeRPE = filtered;
+    setStored(STORAGE_KEYS.RPE_ENTRIES, filtered);
+    this.addAuditLog('DELETE_RPE', `Deleted RPE entry ${id}`);
+    return { success: true, error: null };
   }
 
   static clearAllRPEData(): void {

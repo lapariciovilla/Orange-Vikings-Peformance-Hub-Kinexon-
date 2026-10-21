@@ -300,22 +300,22 @@ DROP POLICY IF EXISTS "Staff insert raw_csv" ON public.raw_imported_csv_records;
 CREATE POLICY "Staff insert raw_csv" ON public.raw_imported_csv_records
     FOR INSERT TO authenticated WITH CHECK (true);
 
--- 5. RPE ENTRIES (Subjective Internal Load - Authenticated Staff Only)
+-- 5. RPE ENTRIES (Subjective Internal Load - Staff & Operational Access)
 DROP POLICY IF EXISTS "Staff select rpe" ON public.rpe_entries;
 CREATE POLICY "Staff select rpe" ON public.rpe_entries
-    FOR SELECT TO authenticated USING (true);
+    FOR SELECT TO anon, authenticated USING (true);
 
 DROP POLICY IF EXISTS "Staff insert rpe" ON public.rpe_entries;
 CREATE POLICY "Staff insert rpe" ON public.rpe_entries
-    FOR INSERT TO authenticated WITH CHECK (true);
+    FOR INSERT TO anon, authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Staff update rpe" ON public.rpe_entries;
 CREATE POLICY "Staff update rpe" ON public.rpe_entries
-    FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+    FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Staff delete rpe" ON public.rpe_entries;
 CREATE POLICY "Staff delete rpe" ON public.rpe_entries
-    FOR DELETE TO authenticated USING (true);
+    FOR DELETE TO anon, authenticated USING (true);
 
 -- 6. GAME APPEARANCES
 DROP POLICY IF EXISTS "Staff select game_appearances" ON public.game_appearances;
