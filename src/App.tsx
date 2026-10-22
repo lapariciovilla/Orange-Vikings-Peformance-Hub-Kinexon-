@@ -159,6 +159,8 @@ export default function App() {
                   setActiveTab('players');
                 }}
                 onNavigateImport={() => setActiveTab('import')}
+                isAuthenticated={Boolean(userEmail)}
+                onNavigateSettings={() => setActiveTab('settings')}
               />
             )}
 
@@ -169,6 +171,8 @@ export default function App() {
             {activeTab === 'import' && (
               <CSVImportView
                 roster={roster}
+                isAuthenticated={Boolean(userEmail)}
+                onNavigateSettings={() => setActiveTab('settings')}
                 onImportComplete={(sessionId) => {
                   refreshData();
                   setActiveTab('dashboard');

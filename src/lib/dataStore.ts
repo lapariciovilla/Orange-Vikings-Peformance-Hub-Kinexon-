@@ -87,6 +87,7 @@ export class DataStore {
   private static activeLogs: AuditLog[] | null = null;
 
   public static isSupabaseActive = false;
+  public static isProtectedAccessRestricted = false;
   public static lastSyncTimestamp: string | null = null;
   public static lastSyncError: string | null = null;
 
@@ -147,8 +148,8 @@ export class DataStore {
           SupabaseService.fetchAuditLogs(),
         ]);
 
-      if (rosterRes.error || sessionsRes.error || recordsRes.error) {
-        const errMsg = rosterRes.error?.message || sessionsRes.error?.message || recordsRes.error?.message;
+      if (rosterRes.error || sessionsRes.error) {
+        const errMsg = rosterRes.error?.message || sessionsRes.error?.message;
         this.lastSyncError = errMsg;
         return {
           success: false,
@@ -162,9 +163,37 @@ export class DataStore {
         };
       }
 
+      const isAuthStaff = Boolean(conn.authenticatedUser);
+      this.isProtectedAccessRestricted = !isAuthStaff;
+
       this.activeRoster = rosterRes.data || [];
       this.activeSessions = sessionsRes.data || [];
-      this.activeRecords = (recordsRes.data || []).map((r) => this.enrichRecordWithRelative(r));
+
+      // Player Session Records (Sensitive external load metrics protected by RLS)
+      if (isAuthStaff) {
+        if (recordsRes.data && recordsRes.data.length > 0) {
+          this.activeRecords = recordsRes.data.map((r) => this.enrichRecordWithRelative(r));
+          setStored(STORAGE_KEYS.PLAYER_RECORDS, this.activeRecords);
+        } else if (recordsRes.error) {
+          console.warn('[DataStore] Authenticated fetch notice; utilizing cached staff records:', recordsRes.error);
+          const cached = getStored<PlayerSessionRecord[]>(STORAGE_KEYS.PLAYER_RECORDS, INITIAL_PLAYER_RECORDS);
+          this.activeRecords = cached.map((r) => this.enrichRecordWithRelative(r));
+        } else {
+          // Authenticated staff, but database has 0 player records yet (check cached)
+          const cached = getStored<PlayerSessionRecord[]>(STORAGE_KEYS.PLAYER_RECORDS, []);
+          if (cached.length > 0) {
+            this.activeRecords = cached.map((r) => this.enrichRecordWithRelative(r));
+            SupabaseService.savePlayerRecords(cached).catch((e) => {
+              console.warn('[DataStore] Background sync of local player records deferred:', e);
+            });
+          } else {
+            this.activeRecords = [];
+          }
+        }
+      } else {
+        // Unauthenticated access: protect sensitive athlete telemetry per Phase 4 security standards
+        this.activeRecords = [];
+      }
 
       // Handle RPE Entries persistence & sync
       if (rpeRes.data && rpeRes.data.length > 0) {
@@ -561,7 +590,13 @@ export class DataStore {
     records: Omit<PlayerSessionRecord, 'id' | 'session_id' | 'created_at'>[],
     rawImportContext?: {
       filename: string;
-      rawRows?: Record<string, string>[];
+      rawRows?: {
+        raw: any;
+        rowIndex?: number;
+        playerIdentifier?: string;
+        parsedStatus?: 'ACCEPTED' | 'REJECTED' | 'DUPLICATE';
+        validationNotes?: string;
+      }[];
       acceptedCount?: number;
       rejectedCount?: number;
       duplicateCount?: number;
@@ -598,13 +633,19 @@ export class DataStore {
 
       const recordsSaveRes = await SupabaseService.savePlayerRecords(newFullRecords);
       if (recordsSaveRes.error) {
+        console.error('[DataStore.saveSessionDataAsync] Failed to persist player records; rolling back session:', recordsSaveRes.error);
+        // Roll back the session to avoid orphan session records with 0 player metrics
+        await SupabaseService.deleteSession(fullMeta.id).catch((delErr) => {
+          console.warn('[DataStore] Failed to rollback session after player record failure:', delErr);
+        });
         return { meta: fullMeta, records: [], error: recordsSaveRes.error };
       }
 
       // Record import history & raw rows
       if (rawImportContext) {
-        await SupabaseService.saveImportHistory({
-          id: `imp_${Date.now()}`,
+        const importId = `imp_${Date.now()}`;
+        const historyRes = await SupabaseService.saveImportHistory({
+          id: importId,
           filename: rawImportContext.filename,
           sessionId: fullMeta.id,
           sessionDate: fullMeta.date,
@@ -613,6 +654,37 @@ export class DataStore {
           duplicateRows: rawImportContext.duplicateCount ?? 0,
           status: 'COMPLETED',
         });
+
+        if (historyRes.error) {
+          console.warn('[DataStore.saveSessionDataAsync] Supabase saveImportHistory error:', historyRes.error);
+        }
+
+        if (rawImportContext.rawRows && rawImportContext.rawRows.length > 0) {
+          const rawPayloads = rawImportContext.rawRows.map((r, idx) => ({
+            importId,
+            filename: rawImportContext.filename,
+            rowIndex: r.rowIndex ?? idx + 1,
+            sessionDate: fullMeta.date,
+            playerIdentifier: r.playerIdentifier,
+            rawData: r.raw,
+            parsedStatus: r.parsedStatus || 'ACCEPTED',
+            validationNotes: r.validationNotes,
+          }));
+          const rawRes = await SupabaseService.saveRawCsvRows(rawPayloads);
+          if (rawRes.error) {
+            console.error('[DataStore.saveSessionDataAsync] Failed to persist raw CSV rows:', rawRes.error);
+            // Return informative warning so user knows raw audit rows encountered RLS or schema issue
+            return {
+              meta: fullMeta,
+              records: newFullRecords,
+              error: {
+                message: `Session and player records saved, but raw CSV records could not be persisted (${rawRes.error.message || 'Row Level Security policy violation'}). Please ensure the RLS policies in Supabase SQL editor are applied.`,
+                code: rawRes.error.code,
+                table: 'raw_imported_csv_records',
+              },
+            };
+          }
+        }
       }
     }
 

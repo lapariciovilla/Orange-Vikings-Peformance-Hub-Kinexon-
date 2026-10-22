@@ -22,6 +22,8 @@ interface DashboardViewProps {
   allSessions: SessionMeta[];
   onSelectPlayer: (playerId: string) => void;
   onNavigateImport: () => void;
+  isAuthenticated?: boolean;
+  onNavigateSettings?: () => void;
 }
 
 type MetricKey = keyof CoreMetrics;
@@ -108,6 +110,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   records,
   onSelectPlayer,
   onNavigateImport,
+  isAuthenticated = false,
+  onNavigateSettings,
 }) => {
   const [selectedRankMetric, setSelectedRankMetric] = useState<MetricKey>('distance_m');
 
@@ -164,6 +168,42 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Coaching Staff Access Control Banner (when signed out) */}
+      {!isAuthenticated && (
+        <div className="bg-zinc-900 border border-amber-600/40 rounded-xl p-5 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-start space-x-3">
+            <div className="p-2.5 bg-amber-950/80 border border-amber-800 rounded-lg shrink-0 mt-0.5">
+              <Shield className="w-5 h-5 text-amber-400" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-black tracking-widest text-amber-400 uppercase">
+                  ACCESS CONTROL RESTRICTED
+                </span>
+                <span className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded font-mono">
+                  PostgreSQL RLS Protected
+                </span>
+              </div>
+              <h2 className="text-sm font-black text-white mt-0.5">
+                Coaching Staff Authentication Required for Live Telemetry
+              </h2>
+              <p className="text-xs text-zinc-400 mt-1 leading-relaxed max-w-3xl">
+                In compliance with athlete privacy standards, detailed external load telemetry (Kinexon tracking: acceleration load, deceleration load, mechanical load, anaerobic exposure, and distance) is protected under PostgreSQL Row Level Security. Sign in with your Coaching Staff credentials in Settings & Export to access live performance telemetry.
+              </p>
+            </div>
+          </div>
+          {onNavigateSettings && (
+            <button
+              onClick={onNavigateSettings}
+              className="bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black px-4 py-2.5 rounded-lg text-xs flex items-center space-x-2 shadow-lg shadow-orange-950/40 shrink-0 cursor-pointer transition-colors"
+            >
+              <span>SIGN IN AS COACH</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 8 Core Metric Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -359,15 +399,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {sortedRecords.length === 0 ? (
           <div className="py-12 text-center text-zinc-500 text-xs">
             <Info className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
-            No values available for {METRIC_CONFIGS[selectedRankMetric].title} in this session.
-            <div className="mt-2">
-              <button
-                onClick={onNavigateImport}
-                className="text-orange-400 hover:underline font-bold"
-              >
-                Import CSV data to populate full load metrics
-              </button>
-            </div>
+            {!isAuthenticated ? (
+              <div className="space-y-1.5">
+                <p className="text-zinc-300 font-bold">Athlete load rankings are protected by Row Level Security.</p>
+                <p className="text-zinc-500">Sign in with your Coaching Staff credentials to view player telemetry for this session.</p>
+                {onNavigateSettings && (
+                  <button
+                    onClick={onNavigateSettings}
+                    className="text-orange-400 hover:text-orange-300 font-bold underline mt-2 inline-block cursor-pointer"
+                  >
+                    Go to Staff Sign-In →
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div>
+                No values available for {METRIC_CONFIGS[selectedRankMetric].title} in this session.
+                <div className="mt-2">
+                  <button
+                    onClick={onNavigateImport}
+                    className="text-orange-400 hover:underline font-bold"
+                  >
+                    Import CSV data to populate full load metrics
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-3">

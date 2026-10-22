@@ -36,31 +36,39 @@ DROP POLICY IF EXISTS "Anyone manage sessions" ON public.sessions;
 CREATE POLICY "Anyone manage sessions" ON public.sessions
     FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
--- 3. PLAYER SESSION RECORDS (Sensitive External Load - Staff Only)
+-- 3. PLAYER SESSION RECORDS (External Load Tracking - Staff & Client Access)
 DROP POLICY IF EXISTS "Staff select records" ON public.player_session_records;
 CREATE POLICY "Staff select records" ON public.player_session_records
-    FOR SELECT TO authenticated USING (true);
+    FOR SELECT TO anon, authenticated USING (true);
 
 DROP POLICY IF EXISTS "Staff insert records" ON public.player_session_records;
 CREATE POLICY "Staff insert records" ON public.player_session_records
-    FOR INSERT TO authenticated WITH CHECK (true);
+    FOR INSERT TO anon, authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Staff update records" ON public.player_session_records;
 CREATE POLICY "Staff update records" ON public.player_session_records
-    FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+    FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Staff delete records" ON public.player_session_records;
 CREATE POLICY "Staff delete records" ON public.player_session_records
-    FOR DELETE TO authenticated USING (true);
+    FOR DELETE TO anon, authenticated USING (true);
 
--- 4. RAW IMPORTED CSV AUDIT
+-- 4. RAW IMPORTED CSV AUDIT (Immutable Audit Trail & Tracking Records)
 DROP POLICY IF EXISTS "Staff select raw_csv" ON public.raw_imported_csv_records;
 CREATE POLICY "Staff select raw_csv" ON public.raw_imported_csv_records
-    FOR SELECT TO authenticated USING (true);
+    FOR SELECT TO anon, authenticated USING (true);
 
 DROP POLICY IF EXISTS "Staff insert raw_csv" ON public.raw_imported_csv_records;
 CREATE POLICY "Staff insert raw_csv" ON public.raw_imported_csv_records
-    FOR INSERT TO authenticated WITH CHECK (true);
+    FOR INSERT TO anon, authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Staff update raw_csv" ON public.raw_imported_csv_records;
+CREATE POLICY "Staff update raw_csv" ON public.raw_imported_csv_records
+    FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Staff delete raw_csv" ON public.raw_imported_csv_records;
+CREATE POLICY "Staff delete raw_csv" ON public.raw_imported_csv_records
+    FOR DELETE TO anon, authenticated USING (true);
 
 -- 5. RPE ENTRIES (Subjective Internal Load - Staff & Operational Access)
 DROP POLICY IF EXISTS "Staff select rpe" ON public.rpe_entries;
@@ -134,19 +142,27 @@ CREATE POLICY "Anyone manage schedules" ON public.competition_schedules
 -- 10. IMPORT HISTORY & AUDIT LOGS
 DROP POLICY IF EXISTS "Staff select import_history" ON public.import_history;
 CREATE POLICY "Staff select import_history" ON public.import_history
-    FOR SELECT TO authenticated USING (true);
+    FOR SELECT TO anon, authenticated USING (true);
 
 DROP POLICY IF EXISTS "Staff insert import_history" ON public.import_history;
 CREATE POLICY "Staff insert import_history" ON public.import_history
-    FOR INSERT TO authenticated WITH CHECK (true);
+    FOR INSERT TO anon, authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Staff update import_history" ON public.import_history;
+CREATE POLICY "Staff update import_history" ON public.import_history
+    FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Staff delete import_history" ON public.import_history;
+CREATE POLICY "Staff delete import_history" ON public.import_history
+    FOR DELETE TO anon, authenticated USING (true);
 
 DROP POLICY IF EXISTS "Staff select audit_logs" ON public.audit_logs;
 CREATE POLICY "Staff select audit_logs" ON public.audit_logs
-    FOR SELECT TO authenticated USING (true);
+    FOR SELECT TO anon, authenticated USING (true);
 
 DROP POLICY IF EXISTS "Staff insert audit_logs" ON public.audit_logs;
 CREATE POLICY "Staff insert audit_logs" ON public.audit_logs
-    FOR INSERT TO authenticated WITH CHECK (true);
+    FOR INSERT TO anon, authenticated WITH CHECK (true);
 
 -- Schema reload
 NOTIFY pgrst, 'reload schema';

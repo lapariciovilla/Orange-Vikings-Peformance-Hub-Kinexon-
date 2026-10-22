@@ -20,6 +20,8 @@ import {
 interface CSVImportViewProps {
   roster: Player[];
   onImportComplete: (sessionId: string) => void;
+  isAuthenticated?: boolean;
+  onNavigateSettings?: () => void;
 }
 
 interface ParsedRow {
@@ -37,7 +39,12 @@ interface ParsedRow {
   status: 'MATCHED' | 'REVIEW' | 'UNMATCHED';
 }
 
-export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportComplete }) => {
+export const CSVImportView: React.FC<CSVImportViewProps> = ({
+  roster,
+  onImportComplete,
+  isAuthenticated = false,
+  onNavigateSettings,
+}) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [csvText, setCsvText] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
@@ -305,16 +312,29 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
         }
       );
 
+      const rawRowsToSave = parsedRows.map((r, idx) => ({
+        raw: r.raw,
+        rowIndex: idx + 1,
+        playerIdentifier: r.playerIdentifier,
+        parsedStatus: (r.matchedPlayer !== null ? 'ACCEPTED' : 'REJECTED') as 'ACCEPTED' | 'REJECTED' | 'DUPLICATE',
+        validationNotes: r.matchedPlayer ? `Matched to ${r.matchedPlayer.displayName} (#${r.matchedPlayer.number})` : 'Unmatched athlete',
+      }));
+
       const result = await DataStore.saveSessionDataAsync(meta, records, {
         filename: fileName || 'import.csv',
+        rawRows: rawRowsToSave,
         acceptedCount: validRows.length,
         rejectedCount: parsedRows.length - validRows.length,
         duplicateCount: duplicateIds.size,
       });
 
       if (result.error) {
+        const errorMsg =
+          result.error.friendlyMessage ||
+          result.error.message ||
+          JSON.stringify(result.error);
         setSaveError(
-          `Supabase persistence error: ${result.error.message || JSON.stringify(result.error)}. Unsaved data has been preserved. Please verify your Supabase database schema and connection, then retry.`
+          `Supabase persistence error: ${errorMsg}. Unsaved data has been preserved in your import preview. Please verify your Coaching Staff sign-in and connection, then retry.`
         );
         setIsSaving(false);
         return;
@@ -857,14 +877,45 @@ export const CSVImportView: React.FC<CSVImportViewProps> = ({ roster, onImportCo
             </table>
           </div>
 
+          {/* Unauthenticated / Guest Notice */}
+          {!isAuthenticated && (
+            <div className="p-3 bg-amber-950/40 border border-amber-800/60 rounded-lg text-amber-300 text-xs flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>Staff Notice: Operating in unauthenticated mode. Full PostgreSQL persistence requires staff login or the updated RLS policies.</span>
+              </div>
+              {onNavigateSettings && (
+                <button
+                  type="button"
+                  onClick={onNavigateSettings}
+                  className="text-xs text-orange-400 hover:text-orange-300 font-bold underline ml-2 shrink-0"
+                >
+                  Sign In / RLS Fix →
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Save Error Alert Banner */}
           {saveError && (
-            <div className="p-4 bg-rose-950/80 border border-rose-600 rounded-lg text-rose-200 text-xs flex items-start space-x-2">
-              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <span className="font-bold block mb-1">Save Failed:</span>
-                <span>{saveError}</span>
+            <div className="p-4 bg-rose-950/80 border border-rose-600 rounded-lg text-rose-200 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-start space-x-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span className="font-bold block mb-1">Persistence Notice:</span>
+                  <span>{saveError}</span>
+                </div>
               </div>
+              {onNavigateSettings && (
+                <button
+                  type="button"
+                  onClick={onNavigateSettings}
+                  className="bg-rose-900/60 hover:bg-rose-800 text-white font-bold px-3 py-1.5 rounded text-xs shrink-0 border border-rose-500 flex items-center space-x-1"
+                >
+                  <span>Settings & Database</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           )}
 

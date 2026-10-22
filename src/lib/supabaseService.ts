@@ -496,13 +496,40 @@ export class SupabaseService {
         updated_at: new Date().toISOString(),
       }));
 
-      const { error } = await supabase
-        .from('player_session_records')
-        .upsert(payloads, { onConflict: 'id' });
+      // Batch operations in chunks of 50
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < payloads.length; i += CHUNK_SIZE) {
+        const chunk = payloads.slice(i, i + CHUNK_SIZE);
 
-      if (error) return { count: 0, error };
+        let { error } = await supabase
+          .from('player_session_records')
+          .upsert(chunk, { onConflict: 'id' });
+
+        if (error) {
+          console.warn('[SupabaseService.savePlayerRecords] Upsert fallback to insert:', error);
+          const insertRes = await supabase
+            .from('player_session_records')
+            .insert(chunk);
+          if (insertRes.error) {
+            error = insertRes.error;
+          } else {
+            error = null;
+          }
+        }
+
+        if (error) {
+          console.error('[SupabaseService.savePlayerRecords] Database error:', error);
+          if (error.code === '42501' || error.message?.includes('violates row-level security')) {
+            (error as any).friendlyMessage =
+              'Database permission denied (Row Level Security). Writing player tracking records requires RLS policy update in Supabase SQL editor or active Coaching Staff login.';
+          }
+          return { count: i, error };
+        }
+      }
+
       return { count: payloads.length, error: null };
     } catch (err) {
+      console.error('[SupabaseService.savePlayerRecords] Exception:', err);
       return { count: 0, error: err };
     }
   }
@@ -870,7 +897,7 @@ export class SupabaseService {
     status: 'COMPLETED' | 'PARTIAL' | 'FAILED';
     checksum?: string;
     metadata?: any;
-  }) {
+  }): Promise<{ data: any; error: any }> {
     try {
       const payload = {
         id: history.id,
@@ -887,13 +914,44 @@ export class SupabaseService {
         metadata: history.metadata || null,
       };
 
-      const { error } = await supabase
+      let { data, error } = await supabase
         .from('import_history')
-        .insert(payload);
+        .upsert([payload], { onConflict: 'id' })
+        .select()
+        .single();
 
-      return { error };
+      if (error) {
+        console.warn('[SupabaseService.saveImportHistory] Upsert fallback to insert:', error);
+        const insertRes = await supabase
+          .from('import_history')
+          .insert([payload])
+          .select()
+          .single();
+        data = insertRes.data;
+        error = insertRes.error;
+      }
+
+      if (error) {
+        console.error('[SupabaseService.saveImportHistory] Error:', error);
+      }
+      return { data, error };
     } catch (err) {
-      return { error: err };
+      console.error('[SupabaseService.saveImportHistory] Exception:', err);
+      return { data: null, error: err };
+    }
+  }
+
+  static async fetchImportHistory(limit = 20): Promise<{ data: any[] | null; error: any }> {
+    try {
+      const { data, error } = await supabase
+        .from('import_history')
+        .select('*')
+        .order('imported_at', { ascending: false })
+        .limit(limit);
+
+      return { data, error };
+    } catch (err) {
+      return { data: null, error: err };
     }
   }
 
@@ -906,13 +964,15 @@ export class SupabaseService {
     rawData: any;
     parsedStatus: 'ACCEPTED' | 'REJECTED' | 'DUPLICATE';
     validationNotes?: string;
-  }[]) {
+  }[]): Promise<{ count: number; error: any }> {
     try {
+      if (!rows || rows.length === 0) return { count: 0, error: null };
+
       const payloads = rows.map((r, idx) => ({
-        id: `raw_${r.importId}_${r.rowIndex || idx}`,
+        id: `raw_${r.importId}_${r.rowIndex || (idx + 1)}`,
         import_id: r.importId,
         filename: r.filename,
-        row_index: r.rowIndex,
+        row_index: r.rowIndex || (idx + 1),
         session_date: r.sessionDate || null,
         player_identifier: r.playerIdentifier || null,
         raw_data: r.rawData,
@@ -921,13 +981,53 @@ export class SupabaseService {
         created_at: new Date().toISOString(),
       }));
 
-      const { error } = await supabase
-        .from('raw_imported_csv_records')
-        .insert(payloads);
+      // Batch in chunks of 50 rows to prevent payload exhaustion or gateway timeouts
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < payloads.length; i += CHUNK_SIZE) {
+        const chunk = payloads.slice(i, i + CHUNK_SIZE);
 
-      return { error };
+        let { error } = await supabase
+          .from('raw_imported_csv_records')
+          .upsert(chunk, { onConflict: 'id' });
+
+        if (error) {
+          console.warn('[SupabaseService.saveRawCsvRows] Upsert fallback to insert:', error);
+          const insertRes = await supabase
+            .from('raw_imported_csv_records')
+            .insert(chunk);
+          if (insertRes.error) {
+            error = insertRes.error;
+          } else {
+            error = null;
+          }
+        }
+
+        if (error) {
+          console.error('[SupabaseService.saveRawCsvRows] Error writing chunk:', error);
+          if (error.code === '42501' || error.message?.includes('violates row-level security')) {
+            (error as any).friendlyMessage =
+              'Database permission denied (Row Level Security) on raw_imported_csv_records. Please apply the updated RLS policy in Supabase SQL editor.';
+          }
+          return { count: i, error };
+        }
+      }
+
+      return { count: payloads.length, error: null };
     } catch (err) {
-      return { error: err };
+      console.error('[SupabaseService.saveRawCsvRows] Exception:', err);
+      return { count: 0, error: err };
+    }
+  }
+
+  static async fetchRawCsvRows(importId?: string, sessionDate?: string): Promise<{ data: any[] | null; error: any }> {
+    try {
+      let query = supabase.from('raw_imported_csv_records').select('*');
+      if (importId) query = query.eq('import_id', importId);
+      if (sessionDate) query = query.eq('session_date', sessionDate);
+      const { data, error } = await query.order('row_index', { ascending: true });
+      return { data, error };
+    } catch (err) {
+      return { data: null, error: err };
     }
   }
 
