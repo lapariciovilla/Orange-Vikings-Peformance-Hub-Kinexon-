@@ -535,8 +535,6 @@ export class DataStore {
     const sessionsMeta = [...this.getSessionsMeta()];
     const existingRecords = this.getPlayerRecords();
 
-    const existingSessionIdx = sessionsMeta.findIndex((s) => s.date === meta.date);
-
     let sessionId = meta.id;
     if (!sessionId) {
       sessionId = `session-${meta.date}`;
@@ -550,6 +548,7 @@ export class DataStore {
       updated_at: new Date().toISOString(),
     };
 
+    const existingSessionIdx = sessionsMeta.findIndex((s) => s.id === fullMeta.id);
     if (existingSessionIdx >= 0) {
       sessionsMeta[existingSessionIdx] = fullMeta;
     } else {
@@ -618,7 +617,7 @@ export class DataStore {
     const newFullRecords: PlayerSessionRecord[] = records.map((rec) =>
       this.enrichRecordWithRelative({
         ...rec,
-        id: `rec-${meta.date.replace(/-/g, '')}-${rec.player_id}`,
+        id: sessionId === `session-${meta.date}` ? `rec-${meta.date.replace(/-/g, '')}-${rec.player_id}` : `${sessionId}_${rec.player_id}`,
         session_id: sessionId,
         created_at: new Date().toISOString(),
       })
@@ -691,7 +690,7 @@ export class DataStore {
     // Now update in-memory and local state
     const sessionsMeta = [...this.getSessionsMeta()];
     const existingRecords = this.getPlayerRecords();
-    const existingSessionIdx = sessionsMeta.findIndex((s) => s.date === meta.date);
+    const existingSessionIdx = sessionsMeta.findIndex((s) => s.id === fullMeta.id);
 
     if (existingSessionIdx >= 0) {
       sessionsMeta[existingSessionIdx] = fullMeta;
