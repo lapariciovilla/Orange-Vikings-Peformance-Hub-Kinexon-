@@ -1,0 +1,4 @@
+/api/ai/status                 /.netlify/functions/status                 200!
+/api/ai/parse-wellness-image   /.netlify/functions/parse-wellness-image   200!
+/api/ai/parse-gamesheet        /.netlify/functions/parse-gamesheet        200!
+/*                             /index.html                                200

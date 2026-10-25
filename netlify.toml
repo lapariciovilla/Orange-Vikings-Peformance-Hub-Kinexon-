@@ -1,0 +1,32 @@
+[build]
+  publish = "dist"
+  command = "npm run build"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# Direct API endpoint routing to Netlify Serverless Functions
+[[redirects]]
+  from = "/api/ai/status"
+  to = "/.netlify/functions/status"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/ai/parse-wellness-image"
+  to = "/.netlify/functions/parse-wellness-image"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/ai/parse-gamesheet"
+  to = "/.netlify/functions/parse-gamesheet"
+  status = 200
+  force = true
+
+# SPA client-side routing fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

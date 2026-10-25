@@ -106,6 +106,14 @@ export const GamesView: React.FC<GamesViewProps> = ({ roster, onNavigateBulkImpo
           }),
         });
 
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          const errMsg = errData.error || (response.status === 404 
+            ? 'API endpoint "/api/ai/parse-gamesheet" not found (HTTP 404). Backend server or Netlify Function required.' 
+            : `Game sheet OCR request failed (HTTP ${response.status})`);
+          throw new Error(errMsg);
+        }
+
         const data = await response.json();
         const playersList = data.data?.players || data.players;
         if (playersList && Array.isArray(playersList) && playersList.length > 0) {
@@ -117,24 +125,11 @@ export const GamesView: React.FC<GamesViewProps> = ({ roster, onNavigateBulkImpo
           setExtractedMinutes(formatted);
           setOcrStatus(`Successfully extracted ${formatted.length} player box score entries via Gemini Vision OCR!`);
         } else {
-          // Local fallback extraction based on roster
-          const mockEntries = roster.map((p) => ({
-            number: p.number.replace(/[^0-9]/g, ''),
-            name: p.displayName,
-            minutes: Math.floor(Math.random() * 25) + 10,
-          }));
-          setExtractedMinutes(mockEntries);
-          setOcrStatus('Image processed. Ready for manual review and minutes application.');
+          setOcrStatus('No player box score entries detected in image. Please check image quality or crop to the table.');
         }
-      } catch (err) {
-        console.warn('Game sheet OCR processing error, populating roster review table:', err);
-        const mockEntries = roster.map((p) => ({
-          number: p.number.replace(/[^0-9]/g, ''),
-          name: p.displayName,
-          minutes: 20,
-        }));
-        setExtractedMinutes(mockEntries);
-        setOcrStatus('Ready for minutes verification.');
+      } catch (err: any) {
+        console.error('Game sheet OCR processing error:', err);
+        setOcrStatus(`OCR Error: ${err.message || 'Failed to process game sheet'}`);
       } finally {
         setIsUploadingSheet(false);
       }

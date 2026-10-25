@@ -159,15 +159,26 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
     message?: string;
   }>({ checked: false, ready: false });
 
+  // AI Engine health status
+  const [aiEngineStatus, setAiEngineStatus] = useState<{
+    checked: boolean;
+    online: boolean;
+    configured: boolean;
+    model?: string;
+    deployment?: string;
+    error?: string;
+  }>({ checked: false, online: false, configured: false });
+
   // Existing data for duplicate checking
   const existingRPE = useMemo(() => DataStore.getRPEEntries(), []);
   const existingRecords = useMemo(() => DataStore.getPlayerRecords(), []);
   const existingSessions = useMemo(() => DataStore.getSessionsMeta(), []);
 
-  // Check Supabase Storage bucket status on mount
+  // Check Supabase Storage bucket and AI status on mount
   useEffect(() => {
     let isMounted = true;
     (async () => {
+      // 1. Probe Storage
       try {
         const res = await SupabaseService.uploadSourceImage('test_probe', {
           name: 'probe.txt',
@@ -189,6 +200,39 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
             checked: true,
             ready: false,
             message: 'Supabase Storage bucket is offline or unprovisioned.',
+          });
+        }
+      }
+
+      // 2. Probe AI Vision Backend Status
+      try {
+        const aiRes = await fetch('/api/ai/status');
+        if (isMounted) {
+          if (aiRes.ok) {
+            const aiData = await aiRes.json();
+            setAiEngineStatus({
+              checked: true,
+              online: true,
+              configured: Boolean(aiData.configured),
+              model: aiData.model || 'gemini-3.8-flash',
+              deployment: aiData.deployment || 'express-server',
+            });
+          } else {
+            setAiEngineStatus({
+              checked: true,
+              online: false,
+              configured: false,
+              error: `API endpoint /api/ai/status returned HTTP ${aiRes.status}. Server or Netlify Function not responding.`,
+            });
+          }
+        }
+      } catch (aiErr: any) {
+        if (isMounted) {
+          setAiEngineStatus({
+            checked: true,
+            online: false,
+            configured: false,
+            error: `Failed to connect to /api/ai/status: ${aiErr.message || 'Network error'}`,
           });
         }
       }
@@ -297,7 +341,17 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
 
     if (!response.ok) {
       const errJson = await response.json().catch(() => ({}));
-      throw new Error(errJson.error || `Server OCR request failed (${response.status})`);
+      let msg = errJson.error;
+      if (!msg) {
+        if (response.status === 404) {
+          msg = `API endpoint "${endpoint}" not found (HTTP 404). In local preview, ensure the Express server is running on port 3000. In deployed Netlify, verify Netlify Functions are active.`;
+        } else if (response.status === 503) {
+          msg = 'Gemini API key is not configured on the server environment (HTTP 503). Please set GEMINI_API_KEY in server secrets.';
+        } else {
+          msg = `Server OCR request failed (HTTP ${response.status})`;
+        }
+      }
+      throw new Error(msg);
     }
 
     const resJson = await response.json();
@@ -511,7 +565,12 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
       triggerToast(`Analysis complete: ${allExtractedRecords.length} records extracted across ${successCount} image(s)!`);
       setStep(3);
     } else {
-      setGlobalError('Failed to analyze selected images. Please verify your connection or retry.');
+      const firstError = updatedImages.find((img) => img.errorMessage)?.errorMessage;
+      setGlobalError(
+        firstError
+          ? `Image analysis failed: ${firstError}`
+          : 'Failed to analyze selected images. Please verify your connection or retry.'
+      );
     }
   };
 
@@ -856,6 +915,32 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
           <p className="text-xs text-zinc-400 mt-1 max-w-2xl">
             Import historical wellness/RPE ratings and basketball box score game minutes from multiple screenshots or photos across multiple dates using real Gemini Vision OCR.
           </p>
+          <div className="flex flex-wrap items-center gap-2 mt-2.5">
+            <span
+              className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold border ${
+                aiEngineStatus.online && aiEngineStatus.configured
+                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60'
+                  : aiEngineStatus.online && !aiEngineStatus.configured
+                  ? 'bg-amber-950/60 text-amber-300 border-amber-700/60'
+                  : 'bg-rose-950/60 text-rose-300 border-rose-700/60'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  aiEngineStatus.online && aiEngineStatus.configured
+                    ? 'bg-emerald-400 animate-pulse'
+                    : 'bg-rose-400'
+                }`}
+              />
+              <span>
+                {aiEngineStatus.online
+                  ? `Gemini Vision: ${aiEngineStatus.model || 'gemini-3.8-flash'} (Online)`
+                  : aiEngineStatus.checked
+                  ? 'Vision OCR Engine: Offline (Check Express port 3000 / Netlify Functions)'
+                  : 'Checking Vision OCR Engine...'}
+              </span>
+            </span>
+          </div>
         </div>
 
         {/* Step Indicator */}

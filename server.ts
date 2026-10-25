@@ -1,13 +1,30 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 
 const app = express();
 const PORT = 3000;
 
+// Enable CORS for all incoming client requests
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+// Log API routes for observability
+app.use("/api", (req, res, next) => {
+  console.log(`[API ${req.method}] ${req.originalUrl}`);
+  next();
+});
 
 // API Routes
 app.get("/api/health", (req, res) => {
@@ -123,6 +140,7 @@ Return STRICTLY a JSON object without markdown code blocks, backticks, or extra 
       config: {
         responseMimeType: "application/json",
         temperature: 0.1,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
       },
     });
 
@@ -246,6 +264,7 @@ Return STRICTLY a JSON object without markdown code blocks, backticks, or extra 
       config: {
         responseMimeType: "application/json",
         temperature: 0.1,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
       },
     });
 
