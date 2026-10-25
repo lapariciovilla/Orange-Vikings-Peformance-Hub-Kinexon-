@@ -6,7 +6,8 @@ import { GoogleGenAI } from "@google/genai";
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // API Routes
 app.get("/api/health", (req, res) => {
@@ -15,71 +16,262 @@ app.get("/api/health", (req, res) => {
     team: "Ehime Orange Vikings",
     app: "ORANGE VIKINGS PERFORMANCE HUB",
     season: "2026–2027",
+    geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
     timestamp: new Date().toISOString(),
   });
 });
 
-// Game Sheet / Box Score Vision OCR Endpoint
-app.post("/api/ai/parse-gamesheet", async (req, res) => {
+// Check AI status
+app.get("/api/ai/status", (req, res) => {
+  res.json({
+    configured: Boolean(process.env.GEMINI_API_KEY),
+    model: "gemini-3.8-flash",
+  });
+});
+
+// -------------------------------------------------------------
+// Wellness & RPE Vision OCR Endpoint
+// -------------------------------------------------------------
+app.post("/api/ai/parse-wellness-image", async (req, res) => {
   try {
-    const { imageBase64, mimeType } = req.body;
+    const { imageBase64, mimeType, filename, roster } = req.body;
     const apiKey = process.env.GEMINI_API_KEY;
 
-    if (apiKey && imageBase64) {
-      try {
-        const ai = new GoogleGenAI({
-          apiKey,
-          httpOptions: {
-            headers: {
-              'User-Agent': 'aistudio-build',
-            },
-          },
-        });
-
-        const response = await ai.models.generateContent({
-          model: "gemini-3.6-flash",
-          contents: [
-            {
-              role: "user",
-              parts: [
-                {
-                  inlineData: {
-                    data: imageBase64.replace(/^data:image\/\w+;base64,/, ""),
-                    mimeType: mimeType || "image/png",
-                  },
-                },
-                {
-                  text: `Extract all basketball player jersey numbers, player names (if available), and minutes played (MIN / MINS / MINUTES / M) from this official game box score / stat sheet image or document.
-The jersey NUMBER is the primary identifier because names may be in Japanese or abbreviated.
-Return STRICTLY a JSON array of objects without markdown backticks or extra text:
-[
-  {"number": "50", "name": "Mitchell Watt", "minutes": 28, "confidence": "HIGH"},
-  {"number": "8", "name": "Ryuji Aoki", "minutes": 22, "confidence": "HIGH"}
-]
-If minutes for a player are unclear or missing, set "minutes": 0 and "confidence": "LOW".`,
-                },
-              ],
-            },
-          ],
-        });
-
-        const replyText = response.text || "";
-        const cleaned = replyText.replace(/```json/g, "").replace(/```/g, "").trim();
-        try {
-          const parsed = JSON.parse(cleaned);
-          return res.json({ players: parsed, success: true });
-        } catch (e) {
-          console.warn("Failed to parse JSON output from Gemini OCR:", replyText);
-        }
-      } catch (err: any) {
-        console.warn("Gemini OCR failed, returning empty list:", err.message);
-      }
+    if (!apiKey) {
+      return res.status(503).json({
+        success: false,
+        error: "GEMINI_API_KEY is not configured on the server environment.",
+        requiresKey: true,
+      });
     }
 
-    return res.json({ players: [], success: false, message: "OCR processed locally" });
+    if (!imageBase64) {
+      return res.status(400).json({ success: false, error: "Image base64 data is required." });
+    }
+
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
+      },
+    });
+
+    const rosterContext = Array.isArray(roster)
+      ? roster.map((p: any) => `#${p.number?.replace(/[^0-9]/g, '')} ${p.displayName} (${p.position})`).join(", ")
+      : "Ehime Orange Vikings 2026-2027 Roster";
+
+    const promptText = `You are a specialized sports science OCR vision analyst for the Ehime Orange Vikings basketball team (B.LEAGUE).
+Analyze this uploaded athlete wellness and Rate of Perceived Exertion (RPE) image, photo, or screenshot (File: "${filename || 'wellness_image'}").
+
+ROSTER CONTEXT:
+${rosterContext}
+
+INSTRUCTIONS:
+1. Infer the table layout:
+   - It may be a single-date log or a multi-date weekly grid (e.g., dates as column headers Mon-Sun, athlete rows).
+2. Extract all dates associated with the data cells.
+   - Format all dates as strict ISO format: "YYYY-MM-DD".
+   - If dates in headers only show day numbers or "8/11", "Aug 11", default to the 2026–2027 season year (2026).
+3. For each cell or row containing athlete RPE/wellness data:
+   - Identify the date the specific rating belongs to.
+   - Extract the jersey number (string of digits e.g. "8", "50", "1") and athlete name.
+   - Extract RPE score: Borg CR10 scale (numeric value between 1.0 and 10.0, e.g., 6, 7.5, 8).
+     CRITICAL: If the cell is empty, blank, marked "REST", "OFF", "DNP", "INJ", or unreadable, set "rpeScore": null. NEVER invent or hallucinate missing RPE values!
+   - Extract wellnessScore (1-5 scale) only if present in image, else null.
+   - Extract sorenessScore (1-5 scale) only if present in image, else null.
+   - Extract durationMin (minutes) only if a session duration column exists, else null.
+   - Extract notes if any qualitative text is written in the cell (e.g., "Left knee sore", "Shootaround only").
+   - Assess confidence: "HIGH", "MEDIUM", or "LOW".
+   - Note warnings if digits are ambiguous or unreadable.
+
+Return STRICTLY a JSON object without markdown code blocks, backticks, or extra conversational text in this format:
+{
+  "sheetTitle": "Morning Wellness & RPE Log",
+  "detectedDates": ["2026-08-11", "2026-08-12"],
+  "entries": [
+    {
+      "date": "2026-08-11",
+      "jerseyNumber": "50",
+      "playerName": "Mitchell Watt",
+      "rpeScore": 7,
+      "wellnessScore": 4,
+      "sorenessScore": 2,
+      "durationMin": 85,
+      "notes": "Good session",
+      "confidence": "HIGH",
+      "warning": null
+    }
+  ],
+  "warnings": []
+}`;
+
+    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: [
+        promptText,
+        {
+          inlineData: {
+            data: cleanBase64,
+            mimeType: mimeType || "image/png",
+          },
+        },
+      ],
+      config: {
+        responseMimeType: "application/json",
+        temperature: 0.1,
+      },
+    });
+
+    const replyText = response.text || "{}";
+    const cleaned = replyText.replace(/```json/gi, "").replace(/```/g, "").trim();
+
+    try {
+      const parsed = JSON.parse(cleaned);
+      return res.json({
+        success: true,
+        data: parsed,
+      });
+    } catch (parseErr: any) {
+      console.warn("Gemini RPE OCR parse error, raw output:", replyText);
+      return res.status(422).json({
+        success: false,
+        error: "Failed to parse structured JSON from vision model.",
+        rawText: replyText,
+      });
+    }
   } catch (error: any) {
-    console.error("Game Sheet OCR error:", error);
-    res.status(500).json({ error: "Failed to parse game sheet image" });
+    console.error("Wellness / RPE Vision OCR Error:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Failed to process wellness image",
+    });
+  }
+});
+
+// -------------------------------------------------------------
+// Game Sheet / Box Score Vision OCR Endpoint (Basketball Minutes)
+// -------------------------------------------------------------
+app.post("/api/ai/parse-gamesheet", async (req, res) => {
+  try {
+    const { imageBase64, mimeType, filename, roster } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(503).json({
+        success: false,
+        error: "GEMINI_API_KEY is not configured on the server environment.",
+        requiresKey: true,
+      });
+    }
+
+    if (!imageBase64) {
+      return res.status(400).json({ success: false, error: "Image base64 data is required." });
+    }
+
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
+      },
+    });
+
+    const rosterContext = Array.isArray(roster)
+      ? roster.map((p: any) => `#${p.number?.replace(/[^0-9]/g, '')} ${p.displayName} (${p.position})`).join(", ")
+      : "Ehime Orange Vikings 2026-2027 Roster";
+
+    const promptText = `You are a specialized sports science and basketball box score OCR analyst for the Ehime Orange Vikings (B.LEAGUE).
+Analyze this official basketball game box score, stat sheet, or official game report image (File: "${filename || 'gamesheet'}").
+
+ROSTER CONTEXT:
+${rosterContext}
+
+INSTRUCTIONS:
+1. Extract game metadata if visible:
+   - "gameDate": ISO format "YYYY-MM-DD" (if visible on sheet, else null).
+   - "opponent": Name of opponent team (e.g. "Ryukyu Golden Kings", "Saga Ballooners", etc., if visible).
+   - "team": Name of team (e.g. "Ehime Orange Vikings" or "Orange Vikings").
+   - "gameNumber": Game number or round if noted (e.g., "Game 1", "Round 5", or null).
+2. For all players listed for the team:
+   - "number": Player jersey number as string of digits (e.g., "50", "8", "1").
+   - "name": Player name as printed on the sheet.
+   - "minutesRaw": The exact text string from the Minutes column (e.g., "28:34", "19:12", "32:05", "00:00", "0", "DNP", "DND").
+   - "minutesNumeric": Correct numeric conversion in minutes:
+     * If MM:SS format like "28:34", calculate: 28 + (34 / 60) = 28.57, rounded to 1 decimal place: 28.6. NEVER write 28.34!
+     * If integer format like "28", return 28.
+     * If played zero minutes or "00:00", return 0.
+     * If DNP (Did Not Play), DND (Did Not Dress), or not on sheet, return null. (Distinguish 0 minutes from unplayed).
+   - "starter": Boolean (true if marked with an asterisk '*' or in starting 5, else false).
+   - "confidence": "HIGH", "MEDIUM", or "LOW".
+   - "warning": Notes about unreadable numbers or ambiguous names if any, else null.
+
+Return STRICTLY a JSON object without markdown code blocks, backticks, or extra conversational text in this format:
+{
+  "gameDate": "2026-10-15",
+  "opponent": "Ryukyu Golden Kings",
+  "team": "Ehime Orange Vikings",
+  "gameNumber": "Game 3",
+  "players": [
+    {
+      "number": "50",
+      "name": "Mitchell Watt",
+      "minutesRaw": "28:34",
+      "minutesNumeric": 28.6,
+      "starter": true,
+      "confidence": "HIGH",
+      "warning": null
+    }
+  ],
+  "warnings": []
+}`;
+
+    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: [
+        promptText,
+        {
+          inlineData: {
+            data: cleanBase64,
+            mimeType: mimeType || "image/png",
+          },
+        },
+      ],
+      config: {
+        responseMimeType: "application/json",
+        temperature: 0.1,
+      },
+    });
+
+    const replyText = response.text || "{}";
+    const cleaned = replyText.replace(/```json/gi, "").replace(/```/g, "").trim();
+
+    try {
+      const parsed = JSON.parse(cleaned);
+      return res.json({
+        success: true,
+        data: parsed,
+      });
+    } catch (parseErr: any) {
+      console.warn("Gemini GameSheet OCR parse error, raw output:", replyText);
+      return res.status(422).json({
+        success: false,
+        error: "Failed to parse structured JSON from vision model.",
+        rawText: replyText,
+      });
+    }
+  } catch (error: any) {
+    console.error("Game Sheet OCR Error:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Failed to parse game sheet image",
+    });
   }
 });
 

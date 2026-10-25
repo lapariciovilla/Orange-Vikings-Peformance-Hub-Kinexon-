@@ -16,6 +16,7 @@ import {
   Filter,
   AlertTriangle,
   Loader2,
+  ScanLine,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -30,9 +31,10 @@ import {
 
 interface FutureModulesViewProps {
   roster: Player[];
+  onNavigateBulkImport?: () => void;
 }
 
-export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) => {
+export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster, onNavigateBulkImport }) => {
   const [toast, setToast] = useState<string | null>(null);
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'yesterday' | 'week'>('all');
 
@@ -246,6 +248,16 @@ export const FutureModulesView: React.FC<FutureModulesViewProps> = ({ roster }) 
             Track, edit, and analyze player-reported Rating of Perceived Exertion (RPE) to monitor internal load.
           </p>
         </div>
+
+        {onNavigateBulkImport && (
+          <button
+            onClick={onNavigateBulkImport}
+            className="bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black px-4 py-2.5 rounded-lg text-xs flex items-center space-x-2 shadow-lg shadow-orange-950/40 cursor-pointer transition-colors shrink-0"
+          >
+            <ScanLine className="w-4 h-4" />
+            <span>BULK IMPORT FROM SCREENSHOT (AI OCR)</span>
+          </button>
+        )}
       </div>
 
       {/* Team Average RPE Graphic */}

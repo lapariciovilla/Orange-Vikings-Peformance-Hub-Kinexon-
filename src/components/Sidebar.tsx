@@ -14,12 +14,14 @@ import {
   CalendarDays,
   FileText,
   Target,
+  ScanLine,
 } from 'lucide-react';
 
 export type ActiveTab =
   | 'dashboard'
   | 'thresholds'
   | 'import'
+  | 'bulk_import'
   | 'games'
   | 'calendar'
   | 'reports'
@@ -50,6 +52,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: "TODAY'S LOAD", icon: LayoutDashboard },
     { id: 'thresholds', label: 'LOAD THRESHOLDS', icon: Target, highlight: true },
     { id: 'import', label: 'IMPORT CSV', icon: Upload },
+    { id: 'bulk_import', label: 'BULK DATA IMPORT', icon: ScanLine, highlight: true },
     { id: 'games', label: 'GAME LOAD', icon: Trophy },
     { id: 'calendar', label: 'MONTHLY CALENDAR', icon: CalendarDays },
     { id: 'reports', label: 'S&C REPORT GENERATOR', icon: FileText },

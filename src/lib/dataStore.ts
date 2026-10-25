@@ -1051,6 +1051,185 @@ export class DataStore {
   }
 
   // ==========================================
+  // BULK OCR IMAGE DATA PERSISTENCE
+  // ==========================================
+  static async saveBatchRPEAsync(entries: Omit<RPEEntry, 'id' | 'created_at'>[]): Promise<{
+    saved: RPEEntry[];
+    errors: { entry: Omit<RPEEntry, 'id' | 'created_at'>; error: any }[];
+  }> {
+    const saved: RPEEntry[] = [];
+    const errors: { entry: Omit<RPEEntry, 'id' | 'created_at'>; error: any }[] = [];
+
+    for (const item of entries) {
+      const res = await this.saveRPEEntryAsync(item);
+      if (res.error) {
+        errors.push({ entry: item, error: res.error });
+      } else if (res.entry) {
+        saved.push(res.entry);
+      }
+    }
+
+    if (saved.length > 0) {
+      await this.addAuditLogAsync(
+        'BULK_IMAGE_RPE_IMPORT',
+        `Bulk imported ${saved.length} RPE entries from image recognition (${errors.length} errors).`
+      );
+    }
+
+    return { saved, errors };
+  }
+
+  static async saveBatchGameMinutesAsync(items: {
+    playerId: string;
+    playerNumber: string;
+    playerName: string;
+    date: string;
+    minutes: number;
+    starter?: boolean;
+    opponent?: string;
+    gameSessionId?: string;
+  }[]): Promise<{
+    savedCount: number;
+    errors: any[];
+  }> {
+    const errors: any[] = [];
+    let savedCount = 0;
+
+    const allSessions = [...this.getSessionsMeta()];
+    const allRecords = [...this.getPlayerRecords()];
+    const gameAppearancesToSave: {
+      sessionId: string;
+      playerId: string;
+      date: string;
+      actualGameMinutes: number;
+      starter?: boolean;
+      notes?: string;
+    }[] = [];
+
+    // Group items by date to ensure proper session association
+    const byDate: Record<string, typeof items> = {};
+    items.forEach((item) => {
+      if (!byDate[item.date]) byDate[item.date] = [];
+      byDate[item.date].push(item);
+    });
+
+    for (const [date, dateItems] of Object.entries(byDate)) {
+      // Find existing game session or create one
+      let session = allSessions.find((s) => s.date === date && s.session_type === 'Game');
+      if (!session) {
+        const opponentName = dateItems[0]?.opponent || 'Opponent';
+        session = {
+          id: `session-${date}-game`,
+          date,
+          season: '2026–2027',
+          session_type: 'Game',
+          session_name: `B.LEAGUE Official Game vs ${opponentName}`,
+          monitored_players_count: dateItems.length,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        allSessions.push(session);
+        if (this.isSupabaseActive) {
+          const sRes = await SupabaseService.saveSession(session);
+          if (sRes.error) console.warn('[DataStore] Game session save notice:', sRes.error);
+        }
+      }
+
+      for (const item of dateItems) {
+        const sessionId = item.gameSessionId || session.id;
+        gameAppearancesToSave.push({
+          sessionId,
+          playerId: item.playerId,
+          date: item.date,
+          actualGameMinutes: item.minutes,
+          starter: Boolean(item.starter),
+          notes: item.starter ? 'Starting 5' : 'Bench Rotation',
+        });
+
+        // Find or create PlayerSessionRecord
+        const recIdx = allRecords.findIndex((r) => r.session_id === sessionId && r.player_id === item.playerId);
+        if (recIdx >= 0) {
+          const existing = allRecords[recIdx];
+          const accelPerMin = existing.accumulated_acceleration_load && item.minutes > 0
+            ? Number((existing.accumulated_acceleration_load / item.minutes).toFixed(2))
+            : existing.accumulated_acceleration_load_per_min;
+          const decelPerMin = existing.deceleration_load && item.minutes > 0
+            ? Number((existing.deceleration_load / item.minutes).toFixed(2))
+            : existing.deceleration_load_per_min;
+
+          const updatedRec = this.enrichRecordWithRelative({
+            ...existing,
+            game_minutes: item.minutes,
+            accumulated_acceleration_load_per_min: accelPerMin,
+            deceleration_load_per_min: decelPerMin,
+            updated_at: new Date().toISOString(),
+          });
+          allRecords[recIdx] = updatedRec;
+          savedCount++;
+
+          if (this.isSupabaseActive) {
+            SupabaseService.updateSingleRecord(updatedRec.id, {
+              game_minutes: item.minutes,
+            }).catch((err) => console.warn('[DataStore] Single record update warning:', err));
+          }
+        } else {
+          // If no tracking record exists yet for this player/game, create one
+          const rosterPlayer = this.getRoster().find((p) => p.id === item.playerId);
+          const newRec: PlayerSessionRecord = this.enrichRecordWithRelative({
+            id: `${sessionId}_${item.playerId}`,
+            session_id: sessionId,
+            player_id: item.playerId,
+            date: item.date,
+            season: '2026–2027',
+            session_type: 'Game',
+            session_name: session.session_name,
+            player_number: item.playerNumber || rosterPlayer?.number || '',
+            player_name: item.playerName || rosterPlayer?.displayName || '',
+            position: rosterPlayer?.position || 'Forward',
+            distance_m: null,
+            accumulated_acceleration_load: null,
+            accumulated_acceleration_load_per_min: null,
+            anaerobic_activity_time: null,
+            deceleration_load: null,
+            deceleration_load_per_min: null,
+            jump_load: null,
+            mechanical_load: null,
+            game_minutes: item.minutes,
+            source: 'MANUAL',
+            created_at: new Date().toISOString(),
+          });
+          allRecords.push(newRec);
+          savedCount++;
+
+          if (this.isSupabaseActive) {
+            SupabaseService.savePlayerRecords([newRec]).catch((err) =>
+              console.warn('[DataStore] New player session record save warning:', err)
+            );
+          }
+        }
+      }
+    }
+
+    this.saveSessionsMeta(allSessions);
+    this.savePlayerRecords(allRecords);
+
+    // Persist to public.game_appearances in Supabase
+    if (this.isSupabaseActive && gameAppearancesToSave.length > 0) {
+      const gaRes = await SupabaseService.saveGameAppearancesBatch(gameAppearancesToSave);
+      if (gaRes.error) {
+        errors.push(gaRes.error);
+      }
+    }
+
+    await this.addAuditLogAsync(
+      'BULK_IMAGE_GAME_MINUTES_IMPORT',
+      `Bulk imported ${savedCount} player game minute entries across ${Object.keys(byDate).length} game dates.`
+    );
+
+    return { savedCount, errors };
+  }
+
+  // ==========================================
   // AUDIT LOGS
   // ==========================================
   static getAuditLogs(): AuditLog[] {

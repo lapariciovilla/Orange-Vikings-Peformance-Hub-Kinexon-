@@ -13,6 +13,7 @@ import { PlayerComparisonView } from './components/PlayerComparisonView';
 import { LoadThresholdsView } from './components/LoadThresholdsView';
 import { FutureModulesView } from './components/FutureModulesView';
 import { SettingsView } from './components/SettingsView';
+import { BulkDataImportView } from './components/BulkDataImportView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 import { DataStore } from './lib/dataStore';
@@ -180,7 +181,26 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'games' && <GamesView roster={roster} />}
+            {activeTab === 'bulk_import' && (
+              <BulkDataImportView
+                roster={roster}
+                isAuthenticated={Boolean(userEmail)}
+                onNavigateSettings={() => setActiveTab('settings')}
+                onNavigateRPE={() => setActiveTab('future_modules')}
+                onNavigateGames={() => setActiveTab('games')}
+                onNavigateDashboard={() => {
+                  refreshData();
+                  setActiveTab('dashboard');
+                }}
+              />
+            )}
+
+            {activeTab === 'games' && (
+              <GamesView
+                roster={roster}
+                onNavigateBulkImport={() => setActiveTab('bulk_import')}
+              />
+            )}
 
             {activeTab === 'calendar' && <CalendarView roster={roster} />}
 
@@ -219,7 +239,12 @@ export default function App() {
 
             {activeTab === 'comparison' && <PlayerComparisonView players={roster} />}
 
-            {activeTab === 'future_modules' && <FutureModulesView roster={roster} />}
+            {activeTab === 'future_modules' && (
+              <FutureModulesView
+                roster={roster}
+                onNavigateBulkImport={() => setActiveTab('bulk_import')}
+              />
+            )}
 
             {activeTab === 'settings' && <SettingsView roster={roster} onRefresh={refreshData} />}
           </ErrorBoundary>

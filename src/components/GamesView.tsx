@@ -19,6 +19,7 @@ import {
   Edit3,
   Loader2,
   Sparkles,
+  ScanLine,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -33,9 +34,10 @@ import {
 
 interface GamesViewProps {
   roster: Player[];
+  onNavigateBulkImport?: () => void;
 }
 
-export const GamesView: React.FC<GamesViewProps> = ({ roster }) => {
+export const GamesView: React.FC<GamesViewProps> = ({ roster, onNavigateBulkImport }) => {
   const games = DataStore.getSessionsMeta().filter((s) => s.session_type === 'Game');
   const gameRecords = DataStore.getPlayerRecords().filter((r) => r.session_type === 'Game');
 
@@ -93,13 +95,27 @@ export const GamesView: React.FC<GamesViewProps> = ({ roster }) => {
           body: JSON.stringify({
             imageBase64: base64Data,
             mimeType: file.type || 'image/png',
+            filename: file.name,
+            roster: roster.map((p) => ({
+              id: p.id,
+              number: p.number,
+              displayName: p.displayName,
+              position: p.position,
+              aliases: p.aliases,
+            })),
           }),
         });
 
         const data = await response.json();
-        if (data.players && Array.isArray(data.players) && data.players.length > 0) {
-          setExtractedMinutes(data.players);
-          setOcrStatus(`Successfully extracted ${data.players.length} player box score entries!`);
+        const playersList = data.data?.players || data.players;
+        if (playersList && Array.isArray(playersList) && playersList.length > 0) {
+          const formatted = playersList.map((p: any) => ({
+            number: String(p.number || '').replace(/[^0-9]/g, ''),
+            name: p.name || '',
+            minutes: p.minutesNumeric !== null && p.minutesNumeric !== undefined ? Number(p.minutesNumeric) : (p.minutes || 0),
+          }));
+          setExtractedMinutes(formatted);
+          setOcrStatus(`Successfully extracted ${formatted.length} player box score entries via Gemini Vision OCR!`);
         } else {
           // Local fallback extraction based on roster
           const mockEntries = roster.map((p) => ({
@@ -230,12 +246,23 @@ export const GamesView: React.FC<GamesViewProps> = ({ roster }) => {
 
       {/* Game Sheet / Box Score OCR Upload Section */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl space-y-4">
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+        <div className="flex flex-wrap items-center justify-between border-b border-zinc-800 pb-3 gap-2">
           <div className="flex items-center space-x-2">
             <Sparkles className="w-5 h-5 text-orange-500" />
             <h2 className="text-base font-black text-white uppercase">GAME SHEET / BOX SCORE VISION OCR UPLOAD</h2>
           </div>
-          <span className="text-xs text-orange-400 font-extrabold uppercase">AUTO-MATCH PLAYERS & MINUTES</span>
+          <div className="flex items-center space-x-2">
+            {onNavigateBulkImport && (
+              <button
+                onClick={onNavigateBulkImport}
+                className="bg-orange-600 hover:bg-orange-500 text-zinc-950 font-black px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 shadow-md transition-colors cursor-pointer"
+              >
+                <ScanLine className="w-3.5 h-3.5" />
+                <span>MULTI-GAME BULK OCR IMPORT</span>
+              </button>
+            )}
+            <span className="text-xs text-orange-400 font-extrabold uppercase hidden sm:inline">AUTO-MATCH PLAYERS & MINUTES</span>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">

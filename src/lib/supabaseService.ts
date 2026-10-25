@@ -709,6 +709,115 @@ export class SupabaseService {
   }
 
   // ==========================================
+  // GAME APPEARANCES (ACTUAL GAME MINUTES)
+  // ==========================================
+  static async saveGameAppearance(appearance: {
+    sessionId: string;
+    playerId: string;
+    date: string;
+    actualGameMinutes: number;
+    starter?: boolean;
+    notes?: string;
+  }): Promise<{ data: any; error: any }> {
+    try {
+      const payload = {
+        id: `ga_${appearance.sessionId}_${appearance.playerId}`,
+        session_id: appearance.sessionId,
+        player_id: appearance.playerId,
+        date: appearance.date,
+        actual_game_minutes: Number(appearance.actualGameMinutes),
+        starter: Boolean(appearance.starter),
+        notes: appearance.notes || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await supabase
+        .from('game_appearances')
+        .upsert(payload, { onConflict: 'session_id,player_id' });
+
+      if (error) {
+        console.warn('[SupabaseService.saveGameAppearance] Error:', error);
+      }
+      return { data, error };
+    } catch (err) {
+      return { data: null, error: err };
+    }
+  }
+
+  static async saveGameAppearancesBatch(appearances: {
+    sessionId: string;
+    playerId: string;
+    date: string;
+    actualGameMinutes: number;
+    starter?: boolean;
+    notes?: string;
+  }[]): Promise<{ count: number; error: any }> {
+    try {
+      if (!appearances || appearances.length === 0) return { count: 0, error: null };
+
+      const payloads = appearances.map((a) => ({
+        id: `ga_${a.sessionId}_${a.playerId}`,
+        session_id: a.sessionId,
+        player_id: a.playerId,
+        date: a.date,
+        actual_game_minutes: Number(a.actualGameMinutes),
+        starter: Boolean(a.starter),
+        notes: a.notes || null,
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { error } = await supabase
+        .from('game_appearances')
+        .upsert(payloads, { onConflict: 'session_id,player_id' });
+
+      if (error) {
+        console.warn('[SupabaseService.saveGameAppearancesBatch] Error:', error);
+        return { count: 0, error };
+      }
+      return { count: payloads.length, error: null };
+    } catch (err) {
+      return { count: 0, error: err };
+    }
+  }
+
+  // ==========================================
+  // SOURCE IMAGE STORAGE (PRIVATE AUDIT BUCKET)
+  // ==========================================
+  static async uploadSourceImage(
+    batchId: string,
+    file: { name: string; base64: string; type: string }
+  ): Promise<{ path: string | null; error: any; bucketReady: boolean }> {
+    try {
+      const bucketName = 'import-source-images';
+      const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const storagePath = `batch_${batchId}/${Date.now()}_${cleanFileName}`;
+
+      const contentType = file.type || 'image/png';
+      const byteCharacters = atob(file.base64.replace(/^data:image\/\w+;base64,/, ''));
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const blobData = new Blob([new Uint8Array(byteNumbers)], { type: contentType });
+
+      const { data, error } = await supabase.storage
+        .from(bucketName)
+        .upload(storagePath, blobData, {
+          contentType,
+          upsert: true,
+        });
+
+      if (error) {
+        return { path: null, error, bucketReady: false };
+      }
+
+      return { path: data?.path || storagePath, error: null, bucketReady: true };
+    } catch (err) {
+      return { path: null, error: err, bucketReady: false };
+    }
+  }
+
+  // ==========================================
   // PLAYER STATUS & INJURY ASSESSMENTS
   // ==========================================
   static async fetchPlayerStatusAssessments(): Promise<{ data: PlayerStatusAssessment[] | null; error: any }> {
