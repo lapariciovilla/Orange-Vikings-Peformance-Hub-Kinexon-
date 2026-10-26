@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import { analyzeImageWithGemini } from "./src/server/geminiVision";
 
 const app = express();
 const PORT = 3000;
@@ -124,48 +125,28 @@ Return STRICTLY a JSON object without markdown code blocks, backticks, or extra 
   "warnings": []
 }`;
 
-    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: [
-        promptText,
-        {
-          inlineData: {
-            data: cleanBase64,
-            mimeType: mimeType || "image/png",
-          },
-        },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        temperature: 0.1,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-      },
+    const result = await analyzeImageWithGemini({
+      apiKey,
+      imageBase64,
+      mimeType,
+      promptText,
+      timeoutMs: 22000,
+      maxRetries: 3,
     });
 
-    const replyText = response.text || "{}";
-    const cleaned = replyText.replace(/```json/gi, "").replace(/```/g, "").trim();
-
-    try {
-      const parsed = JSON.parse(cleaned);
-      return res.json({
-        success: true,
-        data: parsed,
-      });
-    } catch (parseErr: any) {
-      console.warn("Gemini RPE OCR parse error, raw output:", replyText);
-      return res.status(422).json({
-        success: false,
-        error: "Failed to parse structured JSON from vision model.",
-        rawText: replyText,
-      });
-    }
+    return res.json({
+      success: true,
+      data: result.data,
+      modelUsed: result.modelUsed,
+      attempts: result.attempts,
+    });
   } catch (error: any) {
     console.error("Wellness / RPE Vision OCR Error:", error);
-    res.status(500).json({
+    const status = error.status || 500;
+    res.status(status).json({
       success: false,
       error: error.message || "Failed to process wellness image",
+      rawText: error.rawText || undefined,
     });
   }
 });
@@ -248,48 +229,28 @@ Return STRICTLY a JSON object without markdown code blocks, backticks, or extra 
   "warnings": []
 }`;
 
-    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: [
-        promptText,
-        {
-          inlineData: {
-            data: cleanBase64,
-            mimeType: mimeType || "image/png",
-          },
-        },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        temperature: 0.1,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-      },
+    const result = await analyzeImageWithGemini({
+      apiKey,
+      imageBase64,
+      mimeType,
+      promptText,
+      timeoutMs: 22000,
+      maxRetries: 3,
     });
 
-    const replyText = response.text || "{}";
-    const cleaned = replyText.replace(/```json/gi, "").replace(/```/g, "").trim();
-
-    try {
-      const parsed = JSON.parse(cleaned);
-      return res.json({
-        success: true,
-        data: parsed,
-      });
-    } catch (parseErr: any) {
-      console.warn("Gemini GameSheet OCR parse error, raw output:", replyText);
-      return res.status(422).json({
-        success: false,
-        error: "Failed to parse structured JSON from vision model.",
-        rawText: replyText,
-      });
-    }
+    return res.json({
+      success: true,
+      data: result.data,
+      modelUsed: result.modelUsed,
+      attempts: result.attempts,
+    });
   } catch (error: any) {
     console.error("Game Sheet OCR Error:", error);
-    res.status(500).json({
+    const status = error.status || 500;
+    res.status(status).json({
       success: false,
       error: error.message || "Failed to parse game sheet image",
+      rawText: error.rawText || undefined,
     });
   }
 });

@@ -1,4 +1,4 @@
-import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import { analyzeImageWithGemini } from "../../src/server/geminiVision";
 
 export const handler = async (event: any) => {
   // CORS Preflight
@@ -56,15 +56,6 @@ export const handler = async (event: any) => {
       };
     }
 
-    const ai = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
-    });
-
     const rosterContext = Array.isArray(roster)
       ? roster.map((p: any) => `#${p.number?.replace(/[^0-9]/g, '')} ${p.displayName} (${p.position})`).join(", ")
       : "Ehime Orange Vikings 2026-2027 Roster";
@@ -114,29 +105,14 @@ Return STRICTLY a JSON object without markdown code blocks, backticks, or extra 
   "warnings": []
 }`;
 
-    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: [
-        promptText,
-        {
-          inlineData: {
-            data: cleanBase64,
-            mimeType: mimeType || "image/png",
-          },
-        },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        temperature: 0.1,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-      },
+    const result = await analyzeImageWithGemini({
+      apiKey,
+      imageBase64,
+      mimeType: mimeType || "image/png",
+      promptText,
+      timeoutMs: 22000,
+      maxRetries: 3,
     });
-
-    const replyText = response.text || "{}";
-    const cleaned = replyText.replace(/```json/gi, "").replace(/```/g, "").trim();
-    const parsed = JSON.parse(cleaned);
 
     return {
       statusCode: 200,
@@ -146,13 +122,16 @@ Return STRICTLY a JSON object without markdown code blocks, backticks, or extra 
       },
       body: JSON.stringify({
         success: true,
-        data: parsed,
+        data: result.data,
+        modelUsed: result.modelUsed,
+        attempts: result.attempts,
       }),
     };
   } catch (error: any) {
     console.error("Netlify Game Sheet OCR Error:", error);
+    const status = error.status || 500;
     return {
-      statusCode: 500,
+      statusCode: status,
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
@@ -160,6 +139,7 @@ Return STRICTLY a JSON object without markdown code blocks, backticks, or extra 
       body: JSON.stringify({
         success: false,
         error: error.message || "Failed to process game box score on serverless function.",
+        rawText: error.rawText || undefined,
       }),
     };
   }

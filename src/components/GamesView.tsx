@@ -88,50 +88,116 @@ export const GamesView: React.FC<GamesViewProps> = ({ roster, onNavigateBulkImpo
       const base64Data = reader.result as string;
       setPreviewImage(base64Data);
 
-      try {
-        const response = await fetch('/api/ai/parse-gamesheet', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageBase64: base64Data,
-            mimeType: file.type || 'image/png',
-            filename: file.name,
-            roster: roster.map((p) => ({
-              id: p.id,
-              number: p.number,
-              displayName: p.displayName,
-              position: p.position,
-              aliases: p.aliases,
-            })),
-          }),
-        });
+      const maxRetries = 3;
+      let lastError: any = null;
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          const errMsg = errData.error || (response.status === 404 
-            ? 'API endpoint "/api/ai/parse-gamesheet" not found (HTTP 404). Backend server or Netlify Function required.' 
-            : `Game sheet OCR request failed (HTTP ${response.status})`);
-          throw new Error(errMsg);
-        }
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 28000);
 
-        const data = await response.json();
-        const playersList = data.data?.players || data.players;
-        if (playersList && Array.isArray(playersList) && playersList.length > 0) {
-          const formatted = playersList.map((p: any) => ({
-            number: String(p.number || '').replace(/[^0-9]/g, ''),
-            name: p.name || '',
-            minutes: p.minutesNumeric !== null && p.minutesNumeric !== undefined ? Number(p.minutesNumeric) : (p.minutes || 0),
-          }));
-          setExtractedMinutes(formatted);
-          setOcrStatus(`Successfully extracted ${formatted.length} player box score entries via Gemini Vision OCR!`);
-        } else {
-          setOcrStatus('No player box score entries detected in image. Please check image quality or crop to the table.');
+        try {
+          if (attempt > 1) {
+            setOcrStatus(`Retrying box score extraction (attempt ${attempt}/${maxRetries})...`);
+          }
+
+          const response = await fetch('/api/ai/parse-gamesheet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageBase64: base64Data,
+              mimeType: file.type || 'image/png',
+              filename: file.name,
+              roster: roster.map((p) => ({
+                id: p.id,
+                number: p.number,
+                displayName: p.displayName,
+                position: p.position,
+                aliases: p.aliases,
+              })),
+            }),
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            const status = response.status;
+            const errMsg =
+              errData.error ||
+              (status === 404
+                ? 'API endpoint "/api/ai/parse-gamesheet" not found (HTTP 404). Backend server or Netlify Function required.'
+                : status === 504
+                ? 'Server OCR gateway timed out (HTTP 504).'
+                : status === 503
+                ? 'AI model temporarily experiencing high demand (HTTP 503).'
+                : `Game sheet OCR request failed (HTTP ${status})`);
+
+            const isRetryable = status === 429 || status === 502 || status === 503 || status === 504;
+            if (isRetryable && attempt < maxRetries) {
+              const retryAfter = response.headers.get('Retry-After');
+              let delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : 0;
+              if (isNaN(delay) || delay <= 0) {
+                delay = Math.min(1500 * Math.pow(2, attempt - 1) + Math.random() * 500, 6000);
+              }
+              setOcrStatus(`Server busy (${status}). Retrying in ${Math.round(delay / 1000)}s...`);
+              await new Promise((r) => setTimeout(r, delay));
+              continue;
+            }
+
+            throw new Error(errMsg);
+          }
+
+          const data = await response.json();
+          const playersList = data.data?.players || data.players;
+          if (playersList && Array.isArray(playersList) && playersList.length > 0) {
+            const formatted = playersList.map((p: any) => ({
+              number: String(p.number || '').replace(/[^0-9]/g, ''),
+              name: p.name || '',
+              minutes:
+                p.minutesNumeric !== null && p.minutesNumeric !== undefined
+                  ? Number(p.minutesNumeric)
+                  : p.minutes || 0,
+            }));
+            setExtractedMinutes(formatted);
+            setOcrStatus(
+              `Successfully extracted ${formatted.length} player box score entries via Gemini Vision (${data.modelUsed || 'gemini-3.8-flash'})!`
+            );
+          } else {
+            setOcrStatus(
+              'No player box score entries detected in image. Please check image quality or crop to the table.'
+            );
+          }
+          return; // Succeeded
+        } catch (err: any) {
+          clearTimeout(timeoutId);
+          lastError = err;
+          const isAbort = err.name === 'AbortError';
+          const msg = err.message || '';
+          const isRetryable =
+            isAbort ||
+            msg.includes('504') ||
+            msg.includes('503') ||
+            msg.includes('429') ||
+            msg.includes('Failed to fetch');
+
+          if (isRetryable && attempt < maxRetries) {
+            const delay = Math.min(1500 * Math.pow(2, attempt - 1) + Math.random() * 500, 6000);
+            setOcrStatus(
+              isAbort
+                ? `Timed out (504). Retrying attempt ${attempt + 1}/${maxRetries}...`
+                : `Retrying attempt ${attempt + 1}/${maxRetries}...`
+            );
+            await new Promise((r) => setTimeout(r, delay));
+            continue;
+          }
+
+          console.error('Game sheet OCR processing error:', err);
+          setOcrStatus(`OCR Error: ${isAbort ? 'Request timed out after 28 seconds (504).' : err.message}`);
+          break;
+        } finally {
+          setIsUploadingSheet(false);
         }
-      } catch (err: any) {
-        console.error('Game sheet OCR processing error:', err);
-        setOcrStatus(`OCR Error: ${err.message || 'Failed to process game sheet'}`);
-      } finally {
-        setIsUploadingSheet(false);
       }
     };
 

@@ -56,6 +56,8 @@ export interface UploadedImageItem {
   // OCR processing state
   status: 'PENDING' | 'ANALYZING' | 'SUCCESS' | 'ERROR';
   errorMessage?: string;
+  statusDetail?: string;
+  modelUsed?: string;
   
   // Detected metadata
   detectedDates: string[];
@@ -247,12 +249,56 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Convert File to base64
-  const fileToBase64 = (file: File): Promise<string> => {
+  // Convert and optimize image for OCR (downscales ultra-high-res images to max 1800px width/height while maintaining crisp text clarity)
+  const processAndOptimizeImage = (file: File): Promise<{ base64: string; mimeType: string; size: number }> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
       reader.onerror = (err) => reject(err);
+      reader.onload = () => {
+        const rawBase64 = reader.result as string;
+        const img = new Image();
+        img.onerror = () => resolve({ base64: rawBase64, mimeType: file.type || 'image/png', size: file.size });
+        img.onload = () => {
+          const maxDim = 1800; // Optimal resolution for basketball table text and fast network payloads
+          let { width, height } = img;
+          if (width <= maxDim && height <= maxDim && file.size < 900 * 1024) {
+            // Already optimal size
+            return resolve({ base64: rawBase64, mimeType: file.type || 'image/png', size: file.size });
+          }
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            return resolve({ base64: rawBase64, mimeType: file.type || 'image/png', size: file.size });
+          }
+
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // For photos/screenshots > 1.2MB, compress as high-quality JPEG (0.88) to shrink payload from 8MB to ~300KB
+          const targetMime = file.size > 1.2 * 1024 * 1024 ? 'image/jpeg' : (file.type || 'image/png');
+          const optimizedBase64 = canvas.toDataURL(targetMime, 0.88);
+          resolve({
+            base64: optimizedBase64,
+            mimeType: targetMime,
+            size: Math.round(optimizedBase64.length * 0.75),
+          });
+        };
+        img.src = rawBase64;
+      };
       reader.readAsDataURL(file);
     });
   };
@@ -275,7 +321,7 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
       }
 
       try {
-        const base64 = await fileToBase64(file);
+        const { base64, mimeType: optMime, size: optSize } = await processAndOptimizeImage(file);
         const todayStr = new Date().toISOString().split('T')[0];
 
         // Suggest date from filename if present (e.g. 2026-08-11 or 20260811)
@@ -292,8 +338,8 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
           id: `img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           file,
           fileName: file.name,
-          fileSize: file.size,
-          mimeType: file.type,
+          fileSize: optSize,
+          mimeType: optMime,
           previewUrl: URL.createObjectURL(file),
           base64Data: base64,
           status: 'PENDING',
@@ -315,7 +361,10 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
   // -------------------------------------------------------------
   // STEP 2: Vision AI Analysis per Image
   // -------------------------------------------------------------
-  const analyzeSingleImage = async (item: UploadedImageItem): Promise<{
+  const analyzeSingleImage = async (
+    item: UploadedImageItem,
+    onStatusUpdate?: (status: string) => void
+  ): Promise<{
     item: UploadedImageItem;
     records: ReviewRecordItem[];
   }> => {
@@ -333,30 +382,104 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
       })),
     };
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    const maxRetries = 3;
+    let lastError: any = null;
+    let resJson: any = null;
 
-    if (!response.ok) {
-      const errJson = await response.json().catch(() => ({}));
-      let msg = errJson.error;
-      if (!msg) {
-        if (response.status === 404) {
-          msg = `API endpoint "${endpoint}" not found (HTTP 404). In local preview, ensure the Express server is running on port 3000. In deployed Netlify, verify Netlify Functions are active.`;
-        } else if (response.status === 503) {
-          msg = 'Gemini API key is not configured on the server environment (HTTP 503). Please set GEMINI_API_KEY in server secrets.';
-        } else {
-          msg = `Server OCR request failed (HTTP ${response.status})`;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const controller = new AbortController();
+      // 28-second timeout per attempt to match platform constraints
+      const timeoutId = setTimeout(() => controller.abort(), 28000);
+
+      try {
+        if (attempt > 1 && onStatusUpdate) {
+          onStatusUpdate(`Retrying attempt ${attempt}/${maxRetries}...`);
         }
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errJson = await response.json().catch(() => ({}));
+          const status = response.status;
+          let msg = errJson.error;
+
+          if (!msg) {
+            if (status === 504) {
+              msg = `Server OCR gateway timed out (HTTP 504).`;
+            } else if (status === 503) {
+              msg = `AI model is temporarily experiencing high demand (HTTP 503).`;
+            } else if (status === 429) {
+              msg = `API rate limit reached (HTTP 429).`;
+            } else if (status === 404) {
+              msg = `API endpoint "${endpoint}" not found (HTTP 404). Backend server or Netlify Functions required.`;
+            } else {
+              msg = `Server OCR request failed (HTTP ${status})`;
+            }
+          }
+
+          const isRetryable = status === 429 || status === 502 || status === 503 || status === 504;
+          if (isRetryable && attempt < maxRetries) {
+            const retryAfter = response.headers.get('Retry-After');
+            let delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : 0;
+            if (isNaN(delay) || delay <= 0) {
+              delay = Math.min(1500 * Math.pow(2, attempt - 1) + Math.random() * 500, 6000);
+            }
+            if (onStatusUpdate) {
+              onStatusUpdate(`Server busy (${status}). Retrying in ${Math.round(delay / 1000)}s...`);
+            }
+            await new Promise((r) => setTimeout(r, delay));
+            continue;
+          }
+
+          throw new Error(msg);
+        }
+
+        resJson = await response.json();
+        break; // Successfully received response
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        lastError = err;
+        const isAbort = err.name === 'AbortError';
+        const msg = err.message || '';
+        const isRetryable =
+          isAbort ||
+          msg.includes('504') ||
+          msg.includes('503') ||
+          msg.includes('429') ||
+          msg.includes('Failed to fetch') ||
+          msg.includes('NetworkError');
+
+        if (isRetryable && attempt < maxRetries) {
+          const delay = Math.min(1500 * Math.pow(2, attempt - 1) + Math.random() * 500, 6000);
+          if (onStatusUpdate) {
+            onStatusUpdate(
+              isAbort
+                ? `Timed out (504). Retrying attempt ${attempt + 1}/${maxRetries}...`
+                : `Retrying attempt ${attempt + 1}/${maxRetries}...`
+            );
+          }
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+
+        if (isAbort) {
+          throw new Error(
+            'Image analysis timed out after 28 seconds (Gateway Timeout / 504). Please retry or optimize the screenshot.'
+          );
+        }
+        throw err;
       }
-      throw new Error(msg);
     }
 
-    const resJson = await response.json();
-    if (!resJson.success || !resJson.data) {
-      throw new Error(resJson.error || 'Vision OCR failed to parse table.');
+    if (!resJson || !resJson.success || !resJson.data) {
+      throw lastError || new Error('Vision OCR failed to parse table.');
     }
 
     const data = resJson.data;
@@ -511,6 +634,9 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
     const updatedItem: UploadedImageItem = {
       ...item,
       status: 'SUCCESS',
+      statusDetail: `Extracted via ${resJson.modelUsed || 'gemini-3.8-flash'}`,
+      modelUsed: resJson.modelUsed,
+      errorMessage: undefined,
       detectedDates: detectedDates.length > 0 ? detectedDates : [item.primaryDate],
       primaryDate: detectedDates[0] || item.primaryDate,
       detectedOpponent: data.opponent,
@@ -527,30 +653,44 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
     setIsProcessingOcr(true);
     setGlobalError(null);
 
-    const updatedImages: UploadedImageItem[] = [];
-    const allExtractedRecords: ReviewRecordItem[] = [];
-
     for (const imgItem of uploadedImages) {
+      // Skip if already parsed with results unless error
+      if (imgItem.status === 'SUCCESS' && imgItem.extractedCount > 0) {
+        continue;
+      }
+
       try {
         setUploadedImages((prev) =>
-          prev.map((img) => (img.id === imgItem.id ? { ...img, status: 'ANALYZING' } : img))
+          prev.map((img) =>
+            img.id === imgItem.id
+              ? { ...img, status: 'ANALYZING', errorMessage: undefined, statusDetail: 'Scanning table with AI Vision...' }
+              : img
+          )
         );
 
-        const { item: processedItem, records } = await analyzeSingleImage(imgItem);
-        updatedImages.push(processedItem);
-        allExtractedRecords.push(...records);
+        const { item: processedItem, records } = await analyzeSingleImage(imgItem, (statusDetail) => {
+          setUploadedImages((prev) =>
+            prev.map((img) => (img.id === imgItem.id ? { ...img, statusDetail } : img))
+          );
+        });
 
         setUploadedImages((prev) =>
           prev.map((img) => (img.id === imgItem.id ? processedItem : img))
         );
+
+        // Store records incrementally without duplicates
+        setReviewRecords((prev) => [
+          ...prev.filter((r) => r.imageId !== imgItem.id),
+          ...records,
+        ]);
       } catch (err: any) {
         console.error('OCR analysis error on', imgItem.fileName, err);
         const failedItem: UploadedImageItem = {
           ...imgItem,
           status: 'ERROR',
           errorMessage: err.message || 'Vision model OCR analysis failed.',
+          statusDetail: undefined,
         };
-        updatedImages.push(failedItem);
         setUploadedImages((prev) =>
           prev.map((img) => (img.id === imgItem.id ? failedItem : img))
         );
@@ -558,20 +698,73 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
     }
 
     setIsProcessingOcr(false);
-    setReviewRecords(allExtractedRecords);
 
-    const successCount = updatedImages.filter((img) => img.status === 'SUCCESS').length;
-    if (successCount > 0) {
-      triggerToast(`Analysis complete: ${allExtractedRecords.length} records extracted across ${successCount} image(s)!`);
-      setStep(3);
-    } else {
-      const firstError = updatedImages.find((img) => img.errorMessage)?.errorMessage;
-      setGlobalError(
-        firstError
-          ? `Image analysis failed: ${firstError}`
-          : 'Failed to analyze selected images. Please verify your connection or retry.'
-      );
+    setUploadedImages((curr) => {
+      const successCount = curr.filter((img) => img.status === 'SUCCESS').length;
+      const failedCount = curr.filter((img) => img.status === 'ERROR').length;
+      if (successCount > 0 && failedCount === 0) {
+        triggerToast(`Analysis complete: all ${successCount} image(s) processed!`);
+        setStep(3);
+      } else if (successCount > 0 && failedCount > 0) {
+        triggerToast(`Extracted ${successCount} image(s). ${failedCount} image(s) encountered errors.`);
+        setGlobalError(`${failedCount} image(s) failed analysis. You can retry failed images or proceed to review successfully parsed records.`);
+      } else {
+        const firstError = curr.find((img) => img.errorMessage)?.errorMessage;
+        setGlobalError(
+          firstError
+            ? `Image analysis failed: ${firstError}`
+            : 'Failed to analyze selected images. Please verify your connection or retry.'
+        );
+      }
+      return curr;
+    });
+  };
+
+  const handleRetryFailedImages = async () => {
+    const failedList = uploadedImages.filter((img) => img.status === 'ERROR');
+    if (failedList.length === 0) return;
+
+    setIsProcessingOcr(true);
+    setGlobalError(null);
+
+    for (const imgItem of failedList) {
+      try {
+        setUploadedImages((prev) =>
+          prev.map((img) =>
+            img.id === imgItem.id
+              ? { ...img, status: 'ANALYZING', errorMessage: undefined, statusDetail: 'Retrying analysis...' }
+              : img
+          )
+        );
+
+        const { item: processedItem, records } = await analyzeSingleImage(imgItem, (statusDetail) => {
+          setUploadedImages((prev) =>
+            prev.map((img) => (img.id === imgItem.id ? { ...img, statusDetail } : img))
+          );
+        });
+
+        setUploadedImages((prev) =>
+          prev.map((img) => (img.id === imgItem.id ? processedItem : img))
+        );
+
+        setReviewRecords((prev) => [
+          ...prev.filter((r) => r.imageId !== imgItem.id),
+          ...records,
+        ]);
+      } catch (err: any) {
+        const failedItem: UploadedImageItem = {
+          ...imgItem,
+          status: 'ERROR',
+          errorMessage: err.message || 'Vision model OCR analysis failed.',
+          statusDetail: undefined,
+        };
+        setUploadedImages((prev) =>
+          prev.map((img) => (img.id === imgItem.id ? failedItem : img))
+        );
+      }
     }
+
+    setIsProcessingOcr(false);
   };
 
   const handleReanalyzeSingleImage = async (imageId: string) => {
@@ -580,15 +773,24 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
 
     try {
       setUploadedImages((prev) =>
-        prev.map((img) => (img.id === imageId ? { ...img, status: 'ANALYZING', errorMessage: undefined } : img))
+        prev.map((img) =>
+          img.id === imageId
+            ? { ...img, status: 'ANALYZING', errorMessage: undefined, statusDetail: 'Scanning table...' }
+            : img
+        )
       );
 
-      const { item: processedItem, records } = await analyzeSingleImage(target);
+      const { item: processedItem, records } = await analyzeSingleImage(target, (statusDetail) => {
+        setUploadedImages((prev) =>
+          prev.map((img) => (img.id === imageId ? { ...img, statusDetail } : img))
+        );
+      });
+
       setUploadedImages((prev) =>
         prev.map((img) => (img.id === imageId ? processedItem : img))
       );
 
-      // Replace records for this image
+      // Replace records for this image without duplicates
       setReviewRecords((prev) => [
         ...prev.filter((r) => r.imageId !== imageId),
         ...records,
@@ -598,7 +800,9 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
     } catch (err: any) {
       setUploadedImages((prev) =>
         prev.map((img) =>
-          img.id === imageId ? { ...img, status: 'ERROR', errorMessage: err.message } : img
+          img.id === imageId
+            ? { ...img, status: 'ERROR', errorMessage: err.message, statusDetail: undefined }
+            : img
         )
       );
     }
@@ -1243,11 +1447,11 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
                       {img.status === 'ANALYZING' && (
                         <span className="text-orange-400 bg-orange-950/80 border border-orange-800 px-2 py-0.5 rounded font-bold flex items-center space-x-1">
                           <RefreshCw className="w-3 h-3 animate-spin" />
-                          <span>Scanning...</span>
+                          <span>{img.statusDetail || 'Scanning...'}</span>
                         </span>
                       )}
                       {img.status === 'SUCCESS' && (
-                        <span className="text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2 py-0.5 rounded font-bold flex items-center space-x-1">
+                        <span className="text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2 py-0.5 rounded font-bold flex items-center space-x-1" title={img.statusDetail}>
                           <Check className="w-3 h-3" />
                           <span>{img.extractedCount} Records</span>
                         </span>
@@ -1259,8 +1463,14 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
                       )}
                     </div>
 
+                    {img.statusDetail && img.status === 'SUCCESS' && (
+                      <p className="text-[10px] text-zinc-400 bg-zinc-950/60 px-2 py-1 rounded border border-zinc-800">
+                        {img.statusDetail}
+                      </p>
+                    )}
+
                     {img.errorMessage && (
-                      <p className="text-[10px] text-rose-400 bg-rose-950/40 p-2 rounded border border-rose-800">
+                      <p className="text-[10px] text-rose-300 bg-rose-950/60 p-2 rounded border border-rose-800 break-words">
                         {img.errorMessage}
                       </p>
                     )}
@@ -1286,7 +1496,7 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
           </div>
 
           {/* Action Bar */}
-          <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-zinc-800">
             <button
               onClick={() => setStep(1)}
               className="text-xs text-zinc-400 hover:text-white font-bold cursor-pointer"
@@ -1294,25 +1504,51 @@ export const BulkDataImportView: React.FC<BulkDataImportViewProps> = ({
               ← Back to File Picker
             </button>
 
-            <button
-              id="analyze-all-btn"
-              onClick={handleAnalyzeAllImages}
-              disabled={isProcessingOcr || uploadedImages.length === 0}
-              className="bg-orange-600 hover:bg-orange-500 disabled:bg-zinc-700 text-zinc-950 font-black px-6 py-2.5 rounded-lg text-xs flex items-center space-x-2 shadow-lg shadow-orange-950/40 cursor-pointer disabled:cursor-not-allowed transition-colors"
-            >
-              {isProcessingOcr ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin text-zinc-900" />
-                  <span>ANALYZING IMAGES WITH GEMINI VISION...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  <span>ANALYZE ALL {uploadedImages.length} IMAGE(S)</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
+            <div className="flex flex-wrap items-center gap-3">
+              {uploadedImages.some((img) => img.status === 'ERROR') && (
+                <button
+                  onClick={handleRetryFailedImages}
+                  disabled={isProcessingOcr}
+                  className="bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-200 font-bold px-4 py-2.5 rounded-lg text-xs flex items-center space-x-2 cursor-pointer disabled:opacity-50 transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>
+                    Retry Failed ({uploadedImages.filter((img) => img.status === 'ERROR').length}) Images
+                  </span>
+                </button>
               )}
-            </button>
+
+              {reviewRecords.length > 0 && (
+                <button
+                  onClick={() => setStep(3)}
+                  disabled={isProcessingOcr}
+                  className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 font-bold px-4 py-2.5 rounded-lg text-xs flex items-center space-x-2 cursor-pointer transition-colors"
+                >
+                  <span>Proceed to Review ({reviewRecords.length} records ready)</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+
+              <button
+                id="analyze-all-btn"
+                onClick={handleAnalyzeAllImages}
+                disabled={isProcessingOcr || uploadedImages.length === 0}
+                className="bg-orange-600 hover:bg-orange-500 disabled:bg-zinc-700 text-zinc-950 font-black px-6 py-2.5 rounded-lg text-xs flex items-center space-x-2 shadow-lg shadow-orange-950/40 cursor-pointer disabled:cursor-not-allowed transition-colors"
+              >
+                {isProcessingOcr ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-zinc-900" />
+                    <span>ANALYZING IMAGES (AUTO-RETRY ENABLED)...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>ANALYZE ALL {uploadedImages.length} IMAGE(S)</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
