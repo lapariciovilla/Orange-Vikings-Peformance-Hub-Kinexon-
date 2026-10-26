@@ -5,7 +5,6 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
-  timeout = 26
 
 # Direct API endpoint routing to Netlify Serverless Functions
 [[redirects]]
